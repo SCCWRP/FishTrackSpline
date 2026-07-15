@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      VIDEOS_DIR: /videos
+      OUTPUT_DIR: /output
+    volumes:
+      - ../_VIDEOS_COMMON:/videos:ro # real workspace dir, not the repo symlink
+      - ./_OUTPUT:/output
+      - ./server.py:/app/server.py # dev live-reload
+      - ./static:/app/static
