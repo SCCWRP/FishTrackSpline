@@ -11,7 +11,7 @@ docker compose up --build -d          # serves http://localhost:8000
 docker compose logs --tail 20         # expect "Application startup complete."
 ```
 Server code (`server.py`, `sam_service.py`) and `static/` are bind-mounted with `--reload`, so frontend/backend edits apply without rebuilding; rebuild only when deps change.
-MobileSAM models are bind-mounted read-only from `../_MODELS/MOBILESAM` (= `_COMMON/_MODELS/MOBILESAM`; fetch with `uv run python scripts/fetch_models.py`). Embeddings cache in `_CACHE/`.
+MobileSAM models are bind-mounted read-only from `./_COMMON/_MODELS/MOBILESAM` (through the repo's `_COMMON` symlink; fetch with `uv run python scripts/fetch_models.py`). Embeddings cache in `_CACHE/`.
 
 ## Unit tests
 ```bash
