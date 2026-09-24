@@ -51,7 +51,7 @@ const exportStatus = document.getElementById('exportStatus');
 document.getElementById('saveOutputBtn').addEventListener('click', async () => {
   try {
     const saved = await saveToOutput();
-    exportStatus.textContent = `Saved ${saved.map((s) => s.split('/').pop()).join(', ')} to _OUTPUT/`;
+    exportStatus.textContent = `Saved to _OUTPUT/${saved.dir}/ (JSON, CSVs, CVAT XML, ${saved.labels} YOLO labels)`;
   } catch (err) {
     exportStatus.textContent = String(err);
   }

@@ -1,6 +1,9 @@
-// Export keyframes as JSON + CSVs (points, boxes): POST to the server (_OUTPUT/) or browser download.
+// Export keyframes as JSON + CSVs (points, boxes), plus box tracks as CVAT for
+// video XML and YOLO labels: saved to _OUTPUT/<video stem>/ on the server, or
+// (JSON + CSVs only) downloaded in the browser.
 
 import { state } from './state.js';
+import { boxTracks, toCvatXml, toYoloLabels } from './formats.js';
 
 function videoBasename() {
   const name = state.video.url.split('/').pop() || 'video';
@@ -79,22 +82,39 @@ export function toBoxesCSV() {
   return lines.join('\n') + '\n';
 }
 
-async function postExport(filename, content) {
+// fps / frame count come from the server (read from the video file), once.
+async function ensureVideoInfo() {
+  if (state.video.fps) return;
+  const path = state.video.url.replace(/^\/videos\//, '');
+  const res = await fetch(`/api/video/info?path=${encodeURIComponent(path)}`);
+  if (!res.ok) throw new Error(`video info failed: ${res.status}`);
+  const info = await res.json();
+  state.video.fps = info.fps;
+  state.video.frames = info.frames;
+}
+
+// Writes _OUTPUT/<stem>/{JSON, CSVs, ground_truth/annotations.xml, yolo-labels/*.txt};
+// yolo-labels/ is replaced so frames from an earlier save don't linger.
+export async function saveToOutput() {
+  await ensureVideoInfo();
+  const stem = videoBasename();
+  const { width, height, fps, frames } = state.video;
+  const tracks = boxTracks(state.objects, { fps, frames });
+  const files = {
+    [`${stem}_points.json`]: toJSON(),
+    [`${stem}_points.csv`]: toCSV(),
+    [`${stem}_boxes.csv`]: toBoxesCSV(),
+    'ground_truth/annotations.xml': toCvatXml(tracks, { name: stem, width, height, frames }),
+  };
+  for (const [name, content] of Object.entries(toYoloLabels(tracks))) files[`yolo-labels/${name}`] = content;
+
   const res = await fetch('/api/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, content }),
+    body: JSON.stringify({ dir: stem, files, replace: ['yolo-labels'] }),
   });
   if (!res.ok) throw new Error(`export failed: ${res.status}`);
-  return (await res.json()).saved;
-}
-
-export async function saveToOutput() {
-  const base = videoBasename();
-  const savedJson = await postExport(`${base}_points.json`, toJSON());
-  const savedCsv = await postExport(`${base}_points.csv`, toCSV());
-  const savedBoxes = await postExport(`${base}_boxes.csv`, toBoxesCSV());
-  return [savedJson, savedCsv, savedBoxes];
+  return { dir: stem, count: Object.keys(files).length, labels: Object.keys(files).length - 4 };
 }
 
 function downloadBlob(filename, mime, text) {

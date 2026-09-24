@@ -1,7 +1,10 @@
 """FishTrackSpline server: static frontend, video files (with Range), export, MobileSAM."""
 
 import os
+import shutil
 from pathlib import Path
+
+import av
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -21,20 +24,52 @@ app = FastAPI(title="FishTrackSpline")
 sam = SamService(MODELS_DIR, CACHE_DIR)
 
 
-class ExportRequest(BaseModel):
-    filename: str
-    content: str
+@app.get("/api/video/info")
+def video_info(path: str):
+    """Frame rate and frame count of a video under VIDEOS_DIR (for frame-numbered exports)."""
+    video = (VIDEOS_DIR / path).resolve()
+    if not video.is_relative_to(VIDEOS_DIR) or not video.is_file():
+        raise HTTPException(status_code=404, detail="video not found")
+    try:
+        with av.open(str(video)) as container:
+            stream = container.streams.video[0]
+            rate = stream.guessed_rate or stream.average_rate
+            frames = stream.frames or round(float(container.duration / av.time_base) * rate)
+    except (av.error.FFmpegError, IndexError) as err:
+        raise HTTPException(status_code=400, detail=f"cannot read video: {err}")
+    return {"fps": float(rate), "fpsFraction": f"{rate.numerator}/{rate.denominator}", "frames": frames}
+
+
+def safe_part(name: str) -> str:
+    if not name or name.startswith(".") or Path(name).name != name:
+        raise HTTPException(status_code=400, detail=f"invalid name: {name!r}")
+    return name
+
+
+class ExportBundle(BaseModel):
+    dir: str  # subdirectory of OUTPUT_DIR (the video stem)
+    files: dict[str, str]  # relative path (e.g. "yolo-labels/0000000001.txt") -> content
+    replace: list[str] = []  # subdirectories emptied first so stale files don't linger
 
 
 @app.post("/api/export")
-def export_points(req: ExportRequest):
-    name = Path(req.filename).name  # strip any directory components
-    if not name or name.startswith("."):
-        raise HTTPException(status_code=400, detail="invalid filename")
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    dest = OUTPUT_DIR / name
-    dest.write_text(req.content, encoding="utf-8")
-    return {"saved": str(dest)}
+def export_bundle(req: ExportBundle):
+    # Validate everything before touching the disk.
+    base = OUTPUT_DIR / safe_part(req.dir)
+    stale = [base / safe_part(sub) for sub in req.replace]
+    writes = []
+    for rel, content in req.files.items():
+        parts = Path(rel).parts
+        if not parts or Path(rel).is_absolute():
+            raise HTTPException(status_code=400, detail=f"invalid path: {rel!r}")
+        writes.append((base.joinpath(*(safe_part(p) for p in parts)), content))
+
+    for d in stale:
+        shutil.rmtree(d, ignore_errors=True)
+    for dest, content in writes:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+    return {"saved": str(base), "count": len(writes)}
 
 
 # ---------- MobileSAM ----------
