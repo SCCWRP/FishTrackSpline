@@ -62,12 +62,15 @@ body {
   gap: 8px;
 }
 
-/* Stage: aspect-ratio is set from videoWidth/videoHeight at loadedmetadata so the
-   video fills it exactly (no letterboxing) and the canvas rect == displayed video rect. */
+/* Stage: aspect-ratio (and --video-aspect) are set from videoWidth/videoHeight at
+   loadedmetadata so the video fills it exactly (no letterboxing) and the canvas
+   rect == displayed video rect. The height cap is applied through the width
+   (max-width = cap x aspect): a bare max-height would shrink only the height in
+   wide windows, leaving a stage wider than the video. */
 .stage {
   position: relative;
   width: 100%;
-  max-height: 78vh;
+  max-width: calc(78vh * var(--video-aspect, 16 / 9));
   aspect-ratio: 16 / 9;
   background: #000;
   border-radius: 6px;

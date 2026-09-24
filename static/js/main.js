@@ -23,6 +23,7 @@ video.addEventListener('loadedmetadata', () => {
   // Match the stage to the video's aspect so the canvas rect == displayed video
   // rect (no letterboxing) and normalized-coordinate mapping stays exact.
   stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  stage.style.setProperty('--video-aspect', video.videoWidth / video.videoHeight);
 });
 
 video.addEventListener('error', () => {
