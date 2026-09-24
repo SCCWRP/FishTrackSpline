@@ -30,6 +30,11 @@ export function renderObject(obj) {
   renders.set(obj.id, { sig: signature(obj), t0: traj.t0, count, rects });
 }
 
+// Forget every render (e.g. when a saved annotation set replaces the objects).
+export function clearRenders() {
+  renders.clear();
+}
+
 // 'none' (never rendered) | 'fresh' | 'stale' (keyframes changed since)
 export function renderStatus(obj) {
   const r = renders.get(obj.id);

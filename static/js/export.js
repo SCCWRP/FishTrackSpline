@@ -1,8 +1,9 @@
 // Export keyframes as JSON + CSVs (points, boxes), plus box tracks as CVAT for
-// video XML and YOLO labels: saved to _OUTPUT/<video stem>/ on the server, or
-// (JSON + CSVs only) downloaded in the browser.
+// video XML and YOLO labels: saved on the server as a new versioned annotation
+// set (_OUTPUT/<uuid>/, indexed in _OUTPUT/annotation_sets.json), or (JSON +
+// CSVs only) downloaded in the browser.
 
-import { state } from './state.js';
+import { state, setLoadedSet } from './state.js';
 import { boxTracks, toCvatXml, toYoloLabels } from './formats.js';
 
 function videoBasename() {
@@ -85,16 +86,16 @@ export function toBoxesCSV() {
 // fps / frame count come from the server (read from the video file), once.
 async function ensureVideoInfo() {
   if (state.video.fps) return;
-  const path = state.video.url.replace(/^\/videos\//, '');
-  const res = await fetch(`/api/video/info?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`/api/video/info?video=${encodeURIComponent(state.video.id)}`);
   if (!res.ok) throw new Error(`video info failed: ${res.status}`);
   const info = await res.json();
   state.video.fps = info.fps;
   state.video.frames = info.frames;
 }
 
-// Writes _OUTPUT/<stem>/{JSON, CSVs, ground_truth/annotations.xml, yolo-labels/*.txt};
-// yolo-labels/ is replaced so frames from an earlier save don't linger.
+// Writes a new _OUTPUT/<uuid>/{JSON, CSVs, ground_truth/annotations.xml,
+// yolo-labels/*.txt}; the server assigns the uuid and the video's next version.
+// Resolves with the set's index entry.
 export async function saveToOutput() {
   await ensureVideoInfo();
   const stem = videoBasename();
@@ -108,13 +109,15 @@ export async function saveToOutput() {
   };
   for (const [name, content] of Object.entries(toYoloLabels(tracks))) files[`yolo-labels/${name}`] = content;
 
-  const res = await fetch('/api/export', {
+  const res = await fetch('/api/annotation-sets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dir: stem, files, replace: ['yolo-labels'] }),
+    body: JSON.stringify({ video: state.video.id, files, based_on: state.loadedSet?.uuid ?? null }),
   });
-  if (!res.ok) throw new Error(`export failed: ${res.status}`);
-  return { dir: stem, count: Object.keys(files).length, labels: Object.keys(files).length - 4 };
+  if (!res.ok) throw new Error(`save failed: ${res.status}`);
+  const set = await res.json();
+  setLoadedSet(set);
+  return { set, labels: Object.keys(files).length - 4 };
 }
 
 function downloadBlob(filename, mime, text) {

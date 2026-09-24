@@ -17,7 +17,7 @@ export const PALETTE = [
 const SAM_DECODE_KEY = 'fishtrackspline.samDecode';
 
 export const state = {
-  video: { url: '', width: 0, height: 0, duration: 0 },
+  video: { id: '', url: '', width: 0, height: 0, duration: 0 }, // id: "videos/<path>" | "uploads/<name>"
   // point: { id, name, color, visible, type: 'point', points: [{t, x, y}] }
   // box:   { id, name, color, visible, type: 'box',
   //          boxes: [{t, x1, y1, x2, y2, source, edited, prompts: {points: [{x, y, label}], box}}] }
@@ -30,6 +30,7 @@ export const state = {
   samDecode: loadSamDecode(), // 'server' | 'browser'
   viewMode: 'edit', // 'edit' (annotate) | 'view' (crosshairs + rendered box overlays only)
   isolate: false, // box objects: draw only the active object's keyframe on the current frame
+  loadedSet: null, // annotation-set index entry the current annotations were loaded from / saved as
 };
 
 const listeners = [];
@@ -78,6 +79,11 @@ export function undo() {
 
 export function redo() {
   if (history.redo()) notify();
+}
+
+// Annotation content (no view state) — compare to detect unsaved changes.
+export function contentSignature() {
+  return JSON.stringify(capture().objects.map(({ visible, ...o }) => o));
 }
 
 // ---------- objects ----------
@@ -252,6 +258,32 @@ export function deleteBox(objId, box) {
   notify();
 }
 
+// ---------- loading a saved annotation set ----------
+
+// Replace all annotations with the objects of an exported JSON (older exports
+// without a type are point objects). Starts a fresh undo history.
+export function loadAnnotations(objects, set) {
+  state.objects = objects.map((o) => {
+    const obj = { id: o.id, name: o.name, color: o.color, visible: true, type: o.type === 'box' ? 'box' : 'point' };
+    if (obj.type === 'box') {
+      obj.boxes = (o.boxes ?? []).map((b) => ({
+        t: b.t, ...normalizeRect(b),
+        source: b.source ?? 'manual', edited: !!b.edited, prompts: b.prompts ?? emptyPrompts(),
+      }));
+    } else {
+      obj.points = (o.points ?? []).map((p) => ({ t: p.t, x: p.x, y: p.y }));
+    }
+    return obj;
+  });
+  const fishNums = state.objects.map((o) => Number(/^fish (\d+)/.exec(o.name)?.[1] ?? 0));
+  state.nextObjectId = 1 + Math.max(0, ...state.objects.map((o) => o.id));
+  state.nextObjectNum = 1 + Math.max(state.objects.length, ...fishNums);
+  state.activeObjectId = state.objects[0]?.id ?? null;
+  state.loadedSet = set;
+  history.clear();
+  notify();
+}
+
 // ---------- input settings (not undoable) ----------
 
 export function setInputMode(mode) {
@@ -261,6 +293,11 @@ export function setInputMode(mode) {
 
 export function setIsolate(on) {
   state.isolate = on;
+  notify();
+}
+
+export function setLoadedSet(set) {
+  state.loadedSet = set;
   notify();
 }
 

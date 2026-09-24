@@ -1,6 +1,7 @@
 // Bootstrap: video source from ?video=, stage sizing, rAF loop, export buttons.
 
 import { state, addObject, resetHistory } from './state.js';
+import { initLibrary, markSaved, refreshSets, videoIdFromParam } from './library.js';
 import { initOverlay, draw } from './overlay.js';
 import { initUI, tick, applySamAvailability } from './ui.js';
 import { saveToOutput, download } from './export.js';
@@ -12,8 +13,10 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
 const stage = document.getElementById('stage');
 
+// ?video=<path under the videos mount> or ?video=uploads/<file>
 const videoParam = new URLSearchParams(location.search).get('video') || DEFAULT_VIDEO;
-state.video.url = `/videos/${videoParam}`;
+state.video.id = videoIdFromParam(videoParam);
+state.video.url = `/${state.video.id}`;
 video.src = state.video.url;
 
 video.addEventListener('loadedmetadata', () => {
@@ -28,7 +31,7 @@ video.addEventListener('loadedmetadata', () => {
 
 video.addEventListener('error', () => {
   document.getElementById('stageHint').textContent =
-    `Failed to load video "${videoParam}" — check the ?video= path (relative to the videos mount)`;
+    `Failed to load video "${videoParam}" — check the ?video= path (relative to the videos mount, or uploads/<file>)`;
 });
 
 initUI(video);
@@ -36,6 +39,7 @@ initOverlay(video, canvas);
 addObject(); // start with "fish 1" (a point object) active
 resetHistory(); // ...which is not an undoable edit
 initSam(video).then(applySamAvailability);
+initLibrary();
 
 function frame() {
   const now = video.currentTime;
@@ -51,8 +55,10 @@ const exportStatus = document.getElementById('exportStatus');
 
 document.getElementById('saveOutputBtn').addEventListener('click', async () => {
   try {
-    const saved = await saveToOutput();
-    exportStatus.textContent = `Saved to _OUTPUT/${saved.dir}/ (JSON, CSVs, CVAT XML, ${saved.labels} YOLO labels)`;
+    const { set, labels } = await saveToOutput();
+    markSaved();
+    await refreshSets();
+    exportStatus.textContent = `Saved v${set.version} to _OUTPUT/${set.uuid}/ (JSON, CSVs, CVAT XML, ${labels} YOLO labels)`;
   } catch (err) {
     exportStatus.textContent = String(err);
   }

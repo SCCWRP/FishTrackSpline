@@ -15,6 +15,7 @@ def client_factory(tmp_path, monkeypatch):
         monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "out"))
         monkeypatch.setenv("MODELS_DIR", str(models_dir))
         monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
+        monkeypatch.setenv("UPLOADS_DIR", str(tmp_path / "uploads"))
         sys.modules.pop("server", None)
         return TestClient(importlib.import_module("server").app)
 

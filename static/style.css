@@ -28,6 +28,22 @@ body {
 }
 .topbar h1 { font-size: 15px; font-weight: 600; color: var(--text-dim); }
 
+.library { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; color: var(--text-dim); }
+.library label { display: flex; align-items: center; gap: 6px; }
+.library select, .library button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 13px;
+}
+.library select { max-width: 320px; }
+.library button { cursor: pointer; }
+.library button:hover { background: #303748; }
+.library button:disabled, .library select:disabled { opacity: 0.5; cursor: default; }
+.library-status { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .mode-toggle {
   display: flex;
   border: 1px solid var(--border);

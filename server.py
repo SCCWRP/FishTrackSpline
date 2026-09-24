@@ -1,7 +1,7 @@
-"""FishTrackSpline server: static frontend, video files (with Range), export, MobileSAM."""
+"""FishTrackSpline server: static frontend, videos (with Range) + uploads, versioned
+annotation sets, MobileSAM."""
 
 import os
-import shutil
 from pathlib import Path
 
 import av
@@ -12,26 +12,66 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from library import AnnotationStore, LibraryError, list_videos, resolve_video, upload_path
 from sam_service import SamService
 
 VIDEOS_DIR = Path(os.environ.get("VIDEOS_DIR", "_VIDEOS_COMMON")).resolve()
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "_OUTPUT")).resolve()
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "_UPLOADS")).resolve()
 MODELS_DIR = Path(os.environ.get("MODELS_DIR", "_COMMON/_MODELS/MOBILESAM")).resolve()
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "_CACHE/sam")).resolve()
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="FishTrackSpline")
 sam = SamService(MODELS_DIR, CACHE_DIR)
+store = AnnotationStore(OUTPUT_DIR)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def video_file(video: str) -> Path:
+    try:
+        return resolve_video(video, VIDEOS_DIR, UPLOADS_DIR)
+    except LibraryError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+
+
+# ---------- videos ----------
+
+
+@app.get("/api/videos")
+def videos():
+    """Shared videos and uploads: [{id, name, source}] (id = URL path, e.g. "videos/720p/x.mp4")."""
+    return list_videos(VIDEOS_DIR, UPLOADS_DIR)
+
+
+@app.post("/api/videos/upload")
+async def upload_video(name: str, request: Request):
+    """Stream the raw request body into UPLOADS_DIR under a sanitized, unused name."""
+    try:
+        dest = upload_path(UPLOADS_DIR, name)
+    except LibraryError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    tmp = dest.with_name(f".{dest.name}.part")
+    size = 0
+    try:
+        with tmp.open("wb") as f:
+            async for chunk in request.stream():
+                size += len(chunk)
+                f.write(chunk)
+        if size == 0:
+            raise HTTPException(status_code=400, detail="empty upload")
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return {"id": f"uploads/{dest.name}", "name": dest.name, "source": "uploads", "bytes": size}
 
 
 @app.get("/api/video/info")
-def video_info(path: str):
-    """Frame rate and frame count of a video under VIDEOS_DIR (for frame-numbered exports)."""
-    video = (VIDEOS_DIR / path).resolve()
-    if not video.is_relative_to(VIDEOS_DIR) or not video.is_file():
-        raise HTTPException(status_code=404, detail="video not found")
+def video_info(video: str):
+    """Frame rate and frame count of a video (for frame-numbered exports)."""
+    path = video_file(video)
     try:
-        with av.open(str(video)) as container:
+        with av.open(str(path)) as container:
             stream = container.streams.video[0]
             rate = stream.guessed_rate or stream.average_rate
             frames = stream.frames or round(float(container.duration / av.time_base) * rate)
@@ -40,36 +80,36 @@ def video_info(path: str):
     return {"fps": float(rate), "fpsFraction": f"{rate.numerator}/{rate.denominator}", "frames": frames}
 
 
-def safe_part(name: str) -> str:
-    if not name or name.startswith(".") or Path(name).name != name:
-        raise HTTPException(status_code=400, detail=f"invalid name: {name!r}")
-    return name
+# ---------- annotation sets ----------
 
 
-class ExportBundle(BaseModel):
-    dir: str  # subdirectory of OUTPUT_DIR (the video stem)
+class SaveRequest(BaseModel):
+    video: str  # video id
     files: dict[str, str]  # relative path (e.g. "yolo-labels/0000000001.txt") -> content
-    replace: list[str] = []  # subdirectories emptied first so stale files don't linger
+    based_on: str | None = None  # uuid of the set this one was loaded from
 
 
-@app.post("/api/export")
-def export_bundle(req: ExportBundle):
-    # Validate everything before touching the disk.
-    base = OUTPUT_DIR / safe_part(req.dir)
-    stale = [base / safe_part(sub) for sub in req.replace]
-    writes = []
-    for rel, content in req.files.items():
-        parts = Path(rel).parts
-        if not parts or Path(rel).is_absolute():
-            raise HTTPException(status_code=400, detail=f"invalid path: {rel!r}")
-        writes.append((base.joinpath(*(safe_part(p) for p in parts)), content))
+@app.post("/api/annotation-sets")
+def save_annotation_set(req: SaveRequest):
+    """Every save is a new OUTPUT_DIR/<uuid>/ and the video's next version."""
+    video_file(req.video)
+    try:
+        return store.save(req.video, req.files, req.based_on)
+    except LibraryError as err:
+        raise HTTPException(status_code=400, detail=str(err))
 
-    for d in stale:
-        shutil.rmtree(d, ignore_errors=True)
-    for dest, content in writes:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(content, encoding="utf-8")
-    return {"saved": str(base), "count": len(writes)}
+
+@app.get("/api/annotation-sets")
+def annotation_sets(video: str | None = None):
+    return store.list(video)
+
+
+@app.get("/api/annotation-sets/{set_uuid}")
+def load_annotation_set(set_uuid: str):
+    try:
+        return store.load(set_uuid)
+    except LibraryError as err:
+        raise HTTPException(status_code=404, detail=str(err))
 
 
 # ---------- MobileSAM ----------
@@ -141,4 +181,5 @@ def decoder_model():
 
 
 app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

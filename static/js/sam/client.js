@@ -38,7 +38,7 @@ export function samAvailable() {
 
 // Identifies the displayed frame: video path + time in ms.
 export function frameKey() {
-  return `${state.video.url.replace(/^\/videos\//, '')}@${Math.round(video.currentTime * 1000)}`;
+  return `${state.video.id}@${Math.round(video.currentTime * 1000)}`;
 }
 
 function onStillFrame() {

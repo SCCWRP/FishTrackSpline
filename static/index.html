@@ -13,6 +13,13 @@
       <button data-mode="edit" class="active">Editor</button>
       <button data-mode="view">Viewing</button>
     </div>
+    <div class="library">
+      <label>Video <select id="videoSelect"></select></label>
+      <button id="uploadBtn" title="Upload a video (.mp4, .mov, .m4v, .webm) into _UPLOADS/">Upload…</button>
+      <input type="file" id="uploadInput" accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/webm" hidden />
+      <label>Annotations <select id="setSelect"></select></label>
+      <span class="library-status" id="libraryStatus"></span>
+    </div>
   </header>
 
   <main class="layout">
@@ -89,7 +96,7 @@
           <h2>Export</h2>
         </header>
         <div class="export-buttons">
-          <button id="saveOutputBtn" title="Write JSON, CSVs, CVAT XML (ground_truth/) and YOLO labels (yolo-labels/) into _OUTPUT/&lt;video&gt;/ on the server">Save to _OUTPUT</button>
+          <button id="saveOutputBtn" title="Save a new version: JSON, CSVs, CVAT XML (ground_truth/) and YOLO labels (yolo-labels/) into _OUTPUT/&lt;uuid&gt;/ on the server">Save to _OUTPUT</button>
           <button id="downloadBtn" title="Download JSON + CSV in the browser">Download</button>
         </div>
         <div class="export-status" id="exportStatus"></div>

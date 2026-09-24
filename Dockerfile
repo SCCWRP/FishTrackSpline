@@ -11,7 +11,7 @@ ENV UV_PROJECT_ENVIRONMENT=/app/.venv \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-COPY server.py sam_service.py ./
+COPY server.py sam_service.py library.py ./
 COPY static ./static
 
 EXPOSE 8000
