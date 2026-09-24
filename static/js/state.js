@@ -17,7 +17,8 @@ export const PALETTE = [
 const SAM_DECODE_KEY = 'fishtrackspline.samDecode';
 
 export const state = {
-  video: { id: '', url: '', width: 0, height: 0, duration: 0 }, // id: "videos/<path>" | "uploads/<name>"
+  // id: "uploads/<path under _UPLOADS>"; notice: why no video is showing (stays in the stage hint)
+  video: { id: '', url: '', width: 0, height: 0, duration: 0, notice: '' },
   // point: { id, name, color, visible, type: 'point', points: [{t, x, y}] }
   // box:   { id, name, color, visible, type: 'box',
   //          boxes: [{t, x1, y1, x2, y2, source, edited, prompts: {points: [{x, y, label}], box}}] }

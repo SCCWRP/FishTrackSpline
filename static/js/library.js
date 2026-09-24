@@ -1,4 +1,4 @@
-// Top-bar video library: pick a video (shared videos + uploads), upload one,
+// Top-bar video library: pick a video (everything in _UPLOADS), upload one,
 // and load a saved annotation set (version) for the current video.
 
 import { state, loadAnnotations, contentSignature, subscribe } from './state.js';
@@ -36,29 +36,27 @@ function status(text) {
 
 // ---------- videos ----------
 
-// ?video= keeps its original form for shared videos (path under the videos mount).
+// ?video= is the path under _UPLOADS (the "uploads/" prefix is optional).
 export function videoParam(id) {
-  return id.startsWith('videos/') ? id.slice('videos/'.length) : id;
+  return id.replace(/^uploads\//, '');
 }
 
 export function videoIdFromParam(param) {
-  return param.startsWith('uploads/') ? param : `videos/${param}`;
+  return param.startsWith('uploads/') ? param : `uploads/${param}`;
 }
 
 async function refreshVideos() {
   const res = await fetch('/api/videos');
   const videos = res.ok ? await res.json() : [];
   els.videoSelect.textContent = '';
-  for (const source of ['videos', 'uploads']) {
-    const group = document.createElement('optgroup');
-    group.label = source === 'videos' ? 'Videos' : 'Uploads';
-    for (const v of videos.filter((x) => x.source === source)) group.append(new Option(v.name, v.id));
-    if (group.children.length) els.videoSelect.append(group);
-  }
-  if (![...els.videoSelect.options].some((o) => o.value === state.video.id)) {
+  for (const v of videos) els.videoSelect.append(new Option(v.name, v.id));
+  if (!state.video.id) {
+    els.videoSelect.prepend(new Option(videos.length ? 'Choose a video…' : 'No videos — upload one', ''));
+  } else if (!videos.some((v) => v.id === state.video.id)) {
     els.videoSelect.prepend(new Option(videoParam(state.video.id), state.video.id));
   }
   els.videoSelect.value = state.video.id;
+  els.videoSelect.disabled = videos.length === 0;
 }
 
 function switchToVideo(id) {
@@ -117,8 +115,8 @@ function setLabel(s) {
 }
 
 export async function refreshSets() {
-  const res = await fetch(`/api/annotation-sets?video=${encodeURIComponent(state.video.id)}`);
-  sets = res.ok ? await res.json() : [];
+  const res = state.video.id && (await fetch(`/api/annotation-sets?video=${encodeURIComponent(state.video.id)}`));
+  sets = res?.ok ? await res.json() : [];
   renderSetSelect();
 }
 

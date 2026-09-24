@@ -1,23 +1,35 @@
-// Bootstrap: video source from ?video=, stage sizing, rAF loop, export buttons.
+// Bootstrap: video source from ?video= (a file in _UPLOADS; default: the first
+// one), stage sizing, rAF loop, export buttons.
 
-import { state, addObject, resetHistory } from './state.js';
+import { state, addObject, resetHistory, refresh } from './state.js';
 import { initLibrary, markSaved, refreshSets, videoIdFromParam } from './library.js';
 import { initOverlay, draw } from './overlay.js';
 import { initUI, tick, applySamAvailability } from './ui.js';
 import { saveToOutput, download } from './export.js';
 import { initSam } from './sam/client.js';
 
-const DEFAULT_VIDEO = '720p/GOPR7611_trim_720_16s.mp4';
-
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
 const stage = document.getElementById('stage');
 
-// ?video=<path under the videos mount> or ?video=uploads/<file>
-const videoParam = new URLSearchParams(location.search).get('video') || DEFAULT_VIDEO;
-state.video.id = videoIdFromParam(videoParam);
-state.video.url = `/${state.video.id}`;
-video.src = state.video.url;
+async function firstVideo() {
+  try {
+    const res = await fetch('/api/videos');
+    return res.ok ? (await res.json())[0]?.id ?? '' : '';
+  } catch {
+    return '';
+  }
+}
+
+// ?video=<file in _UPLOADS> (or uploads/<file>); without it, the first video there.
+const videoParam = new URLSearchParams(location.search).get('video');
+state.video.id = videoParam ? videoIdFromParam(videoParam) : await firstVideo();
+if (state.video.id) {
+  state.video.url = `/${state.video.id}`;
+  video.src = state.video.url;
+} else {
+  state.video.notice = 'No videos yet — use Upload… in the top bar to add one';
+}
 
 video.addEventListener('loadedmetadata', () => {
   state.video.width = video.videoWidth;
@@ -30,8 +42,9 @@ video.addEventListener('loadedmetadata', () => {
 });
 
 video.addEventListener('error', () => {
-  document.getElementById('stageHint').textContent =
-    `Failed to load video "${videoParam}" — check the ?video= path (relative to the videos mount, or uploads/<file>)`;
+  if (!state.video.id) return;
+  state.video.notice = `Failed to load video "${state.video.id}" — is it in _UPLOADS/, in a format this browser plays?`;
+  refresh();
 });
 
 initUI(video);

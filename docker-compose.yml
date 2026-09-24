@@ -4,14 +4,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      VIDEOS_DIR: /videos
       OUTPUT_DIR: /output
       CACHE_DIR: /cache
       UPLOADS_DIR: /uploads
     volumes:
-      - ../_VIDEOS_COMMON:/videos:ro # real workspace dir, not the repo symlink
       - ./_OUTPUT:/output
-      - ./_UPLOADS:/uploads # uploaded videos
+      - ./_UPLOADS:/uploads # videos (uploaded, or copied in)
       - ../_MODELS/MOBILESAM:/models:ro # MobileSAM ONNX (_COMMON/_MODELS/MOBILESAM; real dir)
       - ./_CACHE:/cache # MobileSAM embedding cache
       - ./server.py:/app/server.py # dev live-reload
