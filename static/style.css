@@ -162,6 +162,19 @@ body {
   padding: 3px 4px;
 }
 .box-toolbar select:disabled { opacity: 0.5; }
+.isolate-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.isolate-btn:hover { background: #303748; }
+.isolate-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 .sam-status {
   margin-left: auto;
   background: var(--panel-2);

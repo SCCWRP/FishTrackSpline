@@ -34,7 +34,7 @@ curl -s http://localhost:8000/api/sam/status                                    
 No repo-local Playwright; install in a scratch dir: `npm i playwright` then
 `chromium.launch({ channel: 'chrome', headless: true })` (uses installed Google Chrome, no browser download).
 
-Key selectors: `#video #overlay #stage #pointsHead #pointsBody #pointsCaption #objectList #addObjectBtn #addObjectMenu #playBtn #scrubber #undoBtn #redoBtn #boxToolbar #inputMode #samDecode #samStatus #saveOutputBtn #downloadBtn #exportStatus #stageHint`.
+Key selectors: `#video #overlay #stage #pointsHead #pointsBody #pointsCaption #objectList #addObjectBtn #addObjectMenu #playBtn #scrubber #undoBtn #redoBtn #boxToolbar #inputMode #samDecode #isolateBtn #samStatus #saveOutputBtn #downloadBtn #exportStatus #stageHint`.
 `#addObjectBtn` opens a menu: click `#addObjectMenu button[data-type=point|box]`.
 Mode toggle (top bar): `#modeToggle button[data-mode=edit|view]`. Box rows have `.render-btn` + `.render-status` (`✓` fresh, `stale` after a box edit).
 
@@ -50,7 +50,7 @@ Recipe that works:
 
 ## Worth re-driving after changes
 Click-to-add + EPS_T replace (re-click same paused time → still 1 row) · drag a point (t fixed, x/y change) · click point = seek; click other object's point = switch active + seek · right-click = delete · visibility eye zeroes that object's painted pixels · Space/←/→ keys (arrow step = 1/30 s) · Save to _OUTPUT writes `_OUTPUT/<stem>/` = `_points.json`, `_points.csv`, `_boxes.csv`, `ground_truth/annotations.xml` (CVAT for video 1.1, 0-based frames, box tracks only, label `fish`, `outside="1"` after the last keyframe) and `yolo-labels/NNNNNNNNNN.txt` (1-based frame, class = track id; folder replaced on each save); Download still gives the 3 JSON/CSV files · `?video=bad.mp4` shows the stage-hint error · viewport resize keeps table coords identical and canvas backing store == rect×DPR.
-Box objects: drag draws a keyframe (a frame that already has one → new object) · corner/edge drag resizes, interior drag moves (marks ✎) · Undo/Redo buttons (drag = 1 entry) · dashed interpolated box between keyframes · right-click inside the box deletes it (manual/SAM box modes) · SAM points: left = +, right = −, right-click a marker removes it · SAM controls disabled when models are missing.
+Box objects: drag draws a keyframe (a frame that already has one → new object) · corner/edge drag resizes, interior drag moves (marks ✎) · Undo/Redo buttons (drag = 1 entry) · dashed interpolated box between keyframes · right-click inside the box deletes it (manual/SAM box modes) · SAM points: left = +, right = −, right-click a marker removes it · SAM controls disabled when models are missing. · ISOLATE (`#isolateBtn`, toggle): only the active box object's keyframe on the current frame is drawn (nothing on frames without one); other boxes aren't clickable; editing still works.
 Viewing mode: point objects show only the crosshair (alpha 255), box objects only their rendered fill (canvas alpha ≈ 64 = 25%) — no dots, splines or outlines; canvas clicks do nothing; box toolbar hidden, undo/redo disabled; a stale render is hidden until Render is pressed again.
 
 ## Gotchas

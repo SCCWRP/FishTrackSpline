@@ -56,6 +56,21 @@ export function draw(now) {
   const cur = boxEdit.currentKeyframe();
   if (cur) drawMask(ctx, cur.obj, cur.box, w, h);
 
+  if (isolating()) {
+    if (cur) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = cur.obj.color;
+      ctx.lineWidth = 2;
+      const b = cur.box;
+      ctx.strokeRect(b.x1 * w, b.y1 * h, (b.x2 - b.x1) * w, (b.y2 - b.y1) * h);
+      samPointsTool.drawPromptMarkers(ctx, w, h);
+      boxEdit.draw(ctx, now, w, h);
+    }
+    boxDrawTool.draw(ctx, now, w, h);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
   for (const obj of state.objects) {
     if (!obj.visible) continue;
     const isActive = obj.id === state.activeObjectId;
@@ -77,6 +92,12 @@ export function draw(now) {
   }
   boxDrawTool.draw(ctx, now, w, h);
   ctx.globalAlpha = 1;
+}
+
+// ISOLATE (box toolbar): only the active box object's keyframe on the current
+// frame is drawn — no other objects, paths, keyframes or interpolated box.
+function isolating() {
+  return state.isolate && getActiveObject()?.type === 'box';
 }
 
 // Viewing mode: point objects show only their crosshair (full opacity), box
@@ -199,8 +220,10 @@ function currentTool() {
 }
 
 // Another visible box object whose displayed box (keyframe or interpolated) has
-// an edge under the pointer — clicking it selects that object.
+// an edge under the pointer — clicking it selects that object. Not while
+// isolating: hidden boxes aren't click targets.
 function otherBoxEdgeAt(e) {
+  if (isolating()) return null;
   const { px, py, w, h } = localPx(e);
   const r = HIT_RADIUS;
   for (const obj of state.objects) {

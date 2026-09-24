@@ -29,6 +29,7 @@ export const state = {
   inputMode: 'manual-box', // box objects: 'manual-box' | 'sam-box' | 'sam-points'
   samDecode: loadSamDecode(), // 'server' | 'browser'
   viewMode: 'edit', // 'edit' (annotate) | 'view' (crosshairs + rendered box overlays only)
+  isolate: false, // box objects: draw only the active object's keyframe on the current frame
 };
 
 const listeners = [];
@@ -255,6 +256,11 @@ export function deleteBox(objId, box) {
 
 export function setInputMode(mode) {
   state.inputMode = mode;
+  notify();
+}
+
+export function setIsolate(on) {
+  state.isolate = on;
   notify();
 }
 

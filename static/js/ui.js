@@ -5,7 +5,7 @@ import {
   state, FRAME_STEP,
   getActiveObject, addObject, renameObject, deleteObject, setActiveObject,
   toggleVisible, deletePoint, deleteBox, keysOf, subscribe,
-  setInputMode, setSamDecode, setViewMode, undo, redo, canUndo, canRedo, refresh,
+  setInputMode, setSamDecode, setViewMode, setIsolate, undo, redo, canUndo, canRedo, refresh,
 } from './state.js';
 import { samAvailable, samStatusText } from './sam/client.js';
 import { renderObject, renderStatus } from './render.js';
@@ -23,7 +23,8 @@ export function initUI(videoEl) {
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
     'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
-    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'samStatus', 'modeToggle',
+    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
+    'modeToggle',
   ]) {
     els[id] = document.getElementById(id);
   }
@@ -65,6 +66,7 @@ function wireAddMenu() {
 function wireBoxToolbar() {
   els.inputMode.addEventListener('change', () => setInputMode(els.inputMode.value));
   els.samDecode.addEventListener('change', () => setSamDecode(els.samDecode.value));
+  els.isolateBtn.addEventListener('click', () => setIsolate(!state.isolate));
 }
 
 // Called once the /api/sam/status check finishes.
@@ -187,6 +189,8 @@ function renderToolbar() {
   els.boxToolbar.classList.toggle('hidden', state.viewMode !== 'edit' || getActiveObject()?.type !== 'box');
   els.inputMode.value = state.inputMode;
   els.samDecode.value = state.samDecode;
+  els.isolateBtn.classList.toggle('active', state.isolate);
+  els.isolateBtn.setAttribute('aria-pressed', String(state.isolate));
 }
 
 function renderObjects() {
