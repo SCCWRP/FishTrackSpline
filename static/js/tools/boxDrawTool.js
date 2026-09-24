@@ -1,8 +1,9 @@
 // Box objects, 'manual-box' / 'sam-box' modes: drag a rectangle. It becomes a
 // keyframe of the active object, unless that object already has one on this
 // frame — then a new box object is created. sam-box sends the rectangle as a
-// SAM box prompt and keeps the mask's bounding box. Right-click inside the
-// current keyframe deletes it.
+// SAM box prompt and keeps the mask's bounding box. Right-click: in manual-box
+// mode, inside the current keyframe deletes it; in sam-box mode, adds a negative
+// point prompt to this frame's box prompt (or removes a clicked marker).
 
 import {
   state, getActiveObject, getObject, boxAt, addObject, addBox, setBoxFromSam, deleteBox,
@@ -11,6 +12,7 @@ import {
 import { env, DRAG_CLICK_PX, clientToNorm, localPx, trackDrag } from './common.js';
 import { samPromptKey, enqueue, decode, storeMask } from '../sam/client.js';
 import { currentKeyframe } from './boxEdit.js';
+import * as samPointsTool from './samPointsTool.js';
 
 let band = null; // rubber-band rect (normalized) while dragging
 
@@ -64,6 +66,10 @@ async function commitSam(objId, t, key, rect) {
 }
 
 export function onContextMenu(e) {
+  if (state.inputMode === 'sam-box') {
+    samPointsTool.onContextMenu(e);
+    return;
+  }
   const cur = currentKeyframe();
   if (!cur) return;
   const { x, y } = clientToNorm(e);

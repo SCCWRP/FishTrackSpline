@@ -2,9 +2,10 @@
 // negative one, right-clicking an existing marker removes it — all on the active
 // object's keyframe for this frame (created if missing). Every change re-decodes
 // all of the frame's prompts and overwrites the box (undo reverts it).
+// 'sam-box' mode reuses the right-click half: negative points refine the box prompt.
 
 import {
-  HIT_RADIUS, getActiveObject, getObject, boxAt, emptyPrompts, setBoxFromSam, setBoxPrompts,
+  state, HIT_RADIUS, getActiveObject, getObject, boxAt, emptyPrompts, setBoxFromSam, setBoxPrompts,
 } from '../state.js';
 import { env, clientToNorm, localPx } from './common.js';
 import { samPromptKey, enqueue, decode, storeMask } from '../sam/client.js';
@@ -36,10 +37,11 @@ function prompt(e, edit) {
   if (!key) return; // not paused / frame not encoded yet (status says which)
   const t = env.video.currentTime;
   const pt = clientToNorm(e);
-  enqueue(() => applyPrompt(active.id, t, key, (prompts) => edit(prompts, pt)));
+  const source = state.inputMode === 'sam-box' ? 'sam-box' : 'sam-points';
+  enqueue(() => applyPrompt(active.id, t, key, source, (prompts) => edit(prompts, pt)));
 }
 
-async function applyPrompt(objId, t, key, edit) {
+async function applyPrompt(objId, t, key, source, edit) {
   const obj = getObject(objId);
   if (!obj) return;
   const kf = boxAt(obj, t);
@@ -53,7 +55,7 @@ async function applyPrompt(objId, t, key, edit) {
   }
   const res = await decode(key, prompts);
   if (!res) return;
-  setBoxFromSam(objId, t, res.box, 'sam-points', prompts);
+  setBoxFromSam(objId, t, res.box, source, prompts);
   const cur = getObject(objId);
   if (cur) storeMask(cur, boxAt(cur, t), res.mask);
 }

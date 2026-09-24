@@ -182,6 +182,7 @@ function hintText() {
   const obj = getActiveObject();
   if (obj?.type !== 'box') return 'Click on the video to add a point for the active object';
   if (state.inputMode === 'sam-points') return 'Pause, then click the fish to prompt SAM (right-click = negative point)';
+  if (state.inputMode === 'sam-box') return 'Pause, then drag a box around the fish (right-click = negative point)';
   return 'Drag on the video to draw a box for the active object';
 }
 
