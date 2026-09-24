@@ -5,9 +5,10 @@ import {
   state, FRAME_STEP,
   getActiveObject, addObject, renameObject, deleteObject, setActiveObject,
   toggleVisible, deletePoint, deleteBox, keysOf, subscribe,
-  setInputMode, setSamDecode, undo, redo, canUndo, canRedo,
+  setInputMode, setSamDecode, setViewMode, undo, redo, canUndo, canRedo, refresh,
 } from './state.js';
 import { samAvailable, samStatusText } from './sam/client.js';
+import { renderObject, renderStatus } from './render.js';
 
 const SAM_UNAVAILABLE_TIP = 'MobileSAM models not found on the server';
 
@@ -22,7 +23,7 @@ export function initUI(videoEl) {
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
     'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
-    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'samStatus',
+    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'samStatus', 'modeToggle',
   ]) {
     els[id] = document.getElementById(id);
   }
@@ -33,6 +34,9 @@ export function initUI(videoEl) {
   wireBoxToolbar();
   els.undoBtn.addEventListener('click', undo);
   els.redoBtn.addEventListener('click', redo);
+  for (const btn of els.modeToggle.querySelectorAll('button')) {
+    btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+  }
 
   subscribe(renderSidebar);
   renderSidebar();
@@ -123,7 +127,7 @@ function wireKeyboard() {
     } else if (e.code === 'ArrowRight') {
       e.preventDefault();
       step(FRAME_STEP);
-    } else if (e.code === 'Delete' || e.code === 'Backspace') {
+    } else if ((e.code === 'Delete' || e.code === 'Backspace') && state.viewMode === 'edit') {
       const obj = getActiveObject();
       if (!obj || !keysOf(obj).length) return;
       const nearest = keysOf(obj).reduce((a, b) =>
@@ -159,12 +163,16 @@ function renderSidebar() {
   renderObjects();
   renderTable();
   renderToolbar();
-  els.undoBtn.disabled = !canUndo();
-  els.redoBtn.disabled = !canRedo();
+  const editing = state.viewMode === 'edit';
+  for (const btn of els.modeToggle.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.dataset.mode === state.viewMode);
+  }
+  els.undoBtn.disabled = !editing || !canUndo();
+  els.redoBtn.disabled = !editing || !canRedo();
   els.stageHint.textContent = hintText();
   els.stageHint.classList.toggle(
     'hidden',
-    state.objects.some((o) => keysOf(o).length > 0),
+    !editing || state.objects.some((o) => keysOf(o).length > 0),
   );
 }
 
@@ -176,7 +184,7 @@ function hintText() {
 }
 
 function renderToolbar() {
-  els.boxToolbar.classList.toggle('hidden', getActiveObject()?.type !== 'box');
+  els.boxToolbar.classList.toggle('hidden', state.viewMode !== 'edit' || getActiveObject()?.type !== 'box');
   els.inputMode.value = state.inputMode;
   els.samDecode.value = state.samDecode;
 }
@@ -224,9 +232,31 @@ function renderObjects() {
       }
     });
 
-    li.append(swatch, badge, name, count, eye, del);
+    li.append(swatch, badge, name, count);
+    if (obj.type === 'box') li.append(...renderControls(obj));
+    li.append(eye, del);
     els.objectList.appendChild(li);
   }
+}
+
+// Render button + status for a box object's cached overlay (see render.js).
+function renderControls(obj) {
+  const status = renderStatus(obj);
+  const btn = document.createElement('button');
+  btn.className = 'render-btn';
+  btn.textContent = 'Render';
+  btn.disabled = obj.boxes.length === 0;
+  btn.title = status === 'stale' ? 'Keyframes changed since the last render — render again'
+    : status === 'fresh' ? 'Rendered — click to render again' : 'Render the overlay for viewing mode';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderObject(obj);
+    refresh();
+  });
+  const mark = document.createElement('span');
+  mark.className = `render-status ${status}`;
+  mark.textContent = status === 'fresh' ? '✓' : status === 'stale' ? 'stale' : '';
+  return [btn, mark];
 }
 
 function iconBtn(text, title, onClick) {

@@ -4,6 +4,7 @@
 import { state, HIT_RADIUS, alphaForDt, getActiveObject, setActiveObject, boxAt } from './state.js';
 import { trajectoryOf } from './spline.js';
 import { drawMask } from './sam/client.js';
+import { renderedBoxAt, RENDER_ALPHA } from './render.js';
 import { initToolEnv, localPx } from './tools/common.js';
 import * as pointTool from './tools/pointTool.js';
 import * as boxEdit from './tools/boxEdit.js';
@@ -47,6 +48,11 @@ export function draw(now) {
   const h = r.height;
   ctx.clearRect(0, 0, w, h);
 
+  if (state.viewMode === 'view') {
+    drawViewMode(now, w, h);
+    return;
+  }
+
   const cur = boxEdit.currentKeyframe();
   if (cur) drawMask(ctx, cur.obj, cur.box, w, h);
 
@@ -70,6 +76,27 @@ export function draw(now) {
     boxEdit.draw(ctx, now, w, h);
   }
   boxDrawTool.draw(ctx, now, w, h);
+  ctx.globalAlpha = 1;
+}
+
+// Viewing mode: point objects show only their crosshair (full opacity), box
+// objects only their rendered overlay (filled, RENDER_ALPHA) when it is fresh.
+function drawViewMode(now, w, h) {
+  for (const obj of state.objects) {
+    if (!obj.visible) continue;
+    if (obj.type === 'box') {
+      const b = renderedBoxAt(obj, now);
+      if (!b) continue;
+      ctx.globalAlpha = RENDER_ALPHA;
+      ctx.fillStyle = obj.color;
+      ctx.fillRect(b.x1 * w, b.y1 * h, (b.x2 - b.x1) * w, (b.y2 - b.y1) * h);
+      continue;
+    }
+    const { traj } = trajectoryOf(obj);
+    if (traj && now >= traj.t0 && now <= traj.t1 && obj.points.length >= 2) {
+      drawCrosshair(obj, traj.evalAt(now), w, h);
+    }
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -190,8 +217,9 @@ function otherBoxEdgeAt(e) {
   return null;
 }
 
+// Viewing mode is read-only: no canvas input.
 function onPointerDown(e) {
-  if (e.button !== 0 || !state.video.duration) return;
+  if (e.button !== 0 || !state.video.duration || state.viewMode === 'view') return;
   if (getActiveObject()?.type === 'box' && boxEdit.onPointerDown(e)) return;
   const other = otherBoxEdgeAt(e);
   if (other) {
@@ -203,6 +231,10 @@ function onPointerDown(e) {
 
 function onHoverMove(e) {
   if (canvas.classList.contains('dragging')) return;
+  if (state.viewMode === 'view') {
+    canvas.style.cursor = 'default';
+    return;
+  }
   const cursor = (getActiveObject()?.type === 'box' && boxEdit.onHover(e))
     || (otherBoxEdgeAt(e) && 'pointer')
     || currentTool().onHover(e);
@@ -211,6 +243,6 @@ function onHoverMove(e) {
 
 function onContextMenu(e) {
   e.preventDefault();
-  if (!state.video.duration) return;
+  if (!state.video.duration || state.viewMode === 'view') return;
   currentTool().onContextMenu(e);
 }

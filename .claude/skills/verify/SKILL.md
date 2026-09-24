@@ -35,6 +35,7 @@ No repo-local Playwright; install in a scratch dir: `npm i playwright` then
 
 Key selectors: `#video #overlay #stage #pointsHead #pointsBody #pointsCaption #objectList #addObjectBtn #addObjectMenu #playBtn #scrubber #undoBtn #redoBtn #boxToolbar #inputMode #samDecode #samStatus #saveOutputBtn #downloadBtn #exportStatus #stageHint`.
 `#addObjectBtn` opens a menu: click `#addObjectMenu button[data-type=point|box]`.
+Mode toggle (top bar): `#modeToggle button[data-mode=edit|view]`. Box rows have `.render-btn` + `.render-status` (`✓` fresh, `stale` after a box edit).
 
 Recipe that works:
 - Wait for load: `page.waitForFunction(() => document.getElementById('video')?.videoWidth > 0)`.
@@ -49,6 +50,7 @@ Recipe that works:
 ## Worth re-driving after changes
 Click-to-add + EPS_T replace (re-click same paused time → still 1 row) · drag a point (t fixed, x/y change) · click point = seek; click other object's point = switch active + seek · right-click = delete · visibility eye zeroes that object's painted pixels · Space/←/→ keys (arrow step = 1/30 s) · export writes 3 files (`_points.json`, `_points.csv`, `_boxes.csv`) into `_OUTPUT/` and triggers 3 downloads · `?video=bad.mp4` shows the stage-hint error · viewport resize keeps table coords identical and canvas backing store == rect×DPR.
 Box objects: drag draws a keyframe (a frame that already has one → new object) · corner/edge drag resizes, interior drag moves (marks ✎) · Undo/Redo buttons (drag = 1 entry) · dashed interpolated box between keyframes · right-click inside the box deletes it (manual/SAM box modes) · SAM points: left = +, right = −, right-click a marker removes it · SAM controls disabled when models are missing.
+Viewing mode: point objects show only the crosshair (alpha 255), box objects only their rendered fill (canvas alpha ≈ 64 = 25%) — no dots, splines or outlines; canvas clicks do nothing; box toolbar hidden, undo/redo disabled; a stale render is hidden until Render is pressed again.
 
 ## Gotchas
 - `favicon.ico` 404s in console — pre-existing noise, filter it when collecting console errors (by `msg.location().url`; the text has no URL).

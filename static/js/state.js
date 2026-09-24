@@ -28,6 +28,7 @@ export const state = {
   nextObjectId: 1,
   inputMode: 'manual-box', // box objects: 'manual-box' | 'sam-box' | 'sam-points'
   samDecode: loadSamDecode(), // 'server' | 'browser'
+  viewMode: 'edit', // 'edit' (annotate) | 'view' (crosshairs + rendered box overlays only)
 };
 
 const listeners = [];
@@ -254,6 +255,16 @@ export function deleteBox(objId, box) {
 
 export function setInputMode(mode) {
   state.inputMode = mode;
+  notify();
+}
+
+export function setViewMode(mode) {
+  state.viewMode = mode;
+  notify();
+}
+
+// Re-render listeners without a state change (e.g. a box overlay was rendered).
+export function refresh() {
   notify();
 }
 

@@ -67,7 +67,7 @@ function schedulePrefetch() {
   clearTimeout(prefetchTimer);
   prefetchTimer = setTimeout(() => {
     const active = getActiveObject();
-    if (available && onStillFrame() && active?.type === 'box' && state.inputMode.startsWith('sam')) {
+    if (available && onStillFrame() && state.viewMode === 'edit' && active?.type === 'box' && state.inputMode.startsWith('sam')) {
       requestEmbedding(frameKey());
     }
   }, PREFETCH_DEBOUNCE_MS);
