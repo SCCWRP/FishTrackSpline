@@ -173,10 +173,10 @@ function renderSidebar() {
   }
   els.undoBtn.disabled = !editing || !canUndo();
   els.redoBtn.disabled = !editing || !canRedo();
-  els.stageHint.textContent = hintText();
+  els.stageHint.textContent = state.video.notice || hintText();
   els.stageHint.classList.toggle(
     'hidden',
-    !editing || state.objects.some((o) => keysOf(o).length > 0),
+    !state.video.notice && (!editing || state.objects.some((o) => keysOf(o).length > 0)),
   );
 }
 
