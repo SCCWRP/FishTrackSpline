@@ -7,12 +7,45 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <header class="topbar">
+    <h1>FishTrackSpline</h1>
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="Mode">
+      <button data-mode="edit" class="active">Editor</button>
+      <button data-mode="view">Viewing</button>
+    </div>
+    <div class="library">
+      <label>Video <select id="videoSelect"></select></label>
+      <button id="uploadBtn" title="Upload a video (.mp4, .mov, .m4v, .webm) into _UPLOADS/">Upload…</button>
+      <input type="file" id="uploadInput" accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/webm" hidden />
+      <label>Annotations <select id="setSelect"></select></label>
+      <span class="library-status" id="libraryStatus"></span>
+    </div>
+  </header>
+
   <main class="layout">
     <section class="left">
       <div class="stage" id="stage">
         <video id="video" muted playsinline preload="auto"></video>
         <canvas id="overlay"></canvas>
         <div class="stage-hint" id="stageHint">Click on the video to add a point for the active object</div>
+      </div>
+      <div class="box-toolbar hidden" id="boxToolbar">
+        <label>Input
+          <select id="inputMode">
+            <option value="manual-box">Manual box</option>
+            <option value="sam-box">SAM box</option>
+            <option value="sam-points">SAM points</option>
+          </select>
+        </label>
+        <label>SAM decode
+          <select id="samDecode">
+            <option value="server">Server</option>
+            <option value="browser">Browser</option>
+          </select>
+        </label>
+        <button class="isolate-btn" id="isolateBtn" aria-pressed="false"
+          title="Show only the active object's keyframe on this frame">ISOLATE</button>
+        <span class="sam-status" id="samStatus"></span>
       </div>
       <div class="transport">
         <button id="playBtn" title="Play/Pause (Space)">▶</button>
@@ -26,6 +59,8 @@
           <option value="1" selected>1×</option>
           <option value="2">2×</option>
         </select>
+        <button id="undoBtn" title="Undo" disabled>↶</button>
+        <button id="redoBtn" title="Redo" disabled>↷</button>
       </div>
     </section>
 
@@ -33,7 +68,13 @@
       <section class="panel">
         <header class="panel-header">
           <h2>Objects</h2>
-          <button id="addObjectBtn">＋ Add object</button>
+          <div class="add-object">
+            <button id="addObjectBtn">＋ Add object</button>
+            <div class="add-menu hidden" id="addObjectMenu">
+              <button data-type="point">Point</button>
+              <button data-type="box">Box</button>
+            </div>
+          </div>
         </header>
         <ul class="object-list" id="objectList"></ul>
       </section>
@@ -44,9 +85,7 @@
         </header>
         <div class="table-wrap">
           <table class="points-table">
-            <thead>
-              <tr><th>time (s)</th><th>x</th><th>y</th><th></th></tr>
-            </thead>
+            <thead id="pointsHead"></thead>
             <tbody id="pointsBody"></tbody>
           </table>
         </div>
@@ -57,7 +96,7 @@
           <h2>Export</h2>
         </header>
         <div class="export-buttons">
-          <button id="saveOutputBtn" title="Write JSON + CSV into _OUTPUT/ on the server">Save to _OUTPUT</button>
+          <button id="saveOutputBtn" title="Save a new version: JSON, CSVs, CVAT XML (ground_truth/) and YOLO labels (yolo-labels/) into _OUTPUT/&lt;uuid&gt;/ on the server">Save to _OUTPUT</button>
           <button id="downloadBtn" title="Download JSON + CSV in the browser">Download</button>
         </div>
         <div class="export-status" id="exportStatus"></div>
