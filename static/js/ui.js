@@ -9,6 +9,7 @@ import {
 } from './state.js';
 import { samAvailable, samStatusText } from './sam/client.js';
 import { renderObject, renderStatus } from './render.js';
+import { convertPointsToBox } from './sam/convert.js';
 
 const SAM_UNAVAILABLE_TIP = 'MobileSAM models not found on the server';
 
@@ -17,6 +18,7 @@ const els = {};
 let tableRows = []; // [{ tr, key }] for the active object, sorted by t
 let highlightedRow = null;
 let scrubbing = false;
+let converting = null; // { objId, done, total } while a point object is converted to boxes
 
 export function initUI(videoEl) {
   video = videoEl;
@@ -239,6 +241,7 @@ function renderObjects() {
 
     li.append(swatch, badge, name, count);
     if (obj.type === 'box') li.append(...renderControls(obj));
+    else li.append(convertButton(obj));
     li.append(eye, del);
     els.objectList.appendChild(li);
   }
@@ -262,6 +265,32 @@ function renderControls(obj) {
   mark.className = `render-status ${status}`;
   mark.textContent = status === 'fresh' ? '✓' : status === 'stale' ? 'stale' : '';
   return [btn, mark];
+}
+
+// "→ Box": MobileSAM on each point keyframe -> a new box object (sam/convert.js).
+function convertButton(obj) {
+  const btn = document.createElement('button');
+  btn.className = 'render-btn';
+  const busy = converting?.objId === obj.id;
+  btn.textContent = busy ? `${converting.done}/${converting.total}` : '→ Box';
+  btn.disabled = !!converting || !samAvailable() || state.viewMode !== 'edit' || obj.points.length === 0;
+  btn.title = !samAvailable() ? SAM_UNAVAILABLE_TIP
+    : 'Run MobileSAM on each point and add the surrounding boxes as a new box object';
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    converting = { objId: obj.id, done: 0, total: obj.points.length };
+    renderSidebar();
+    try {
+      await convertPointsToBox(video, obj, (done, total) => {
+        converting = { objId: obj.id, done, total };
+        renderSidebar();
+      });
+    } finally {
+      converting = null;
+      renderSidebar();
+    }
+  });
+  return btn;
 }
 
 function iconBtn(text, title, onClick) {

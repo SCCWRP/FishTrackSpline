@@ -36,7 +36,7 @@ No repo-local Playwright; install in a scratch dir: `npm i playwright` then
 
 Key selectors: `#video #overlay #stage #pointsHead #pointsBody #pointsCaption #objectList #addObjectBtn #addObjectMenu #playBtn #scrubber #undoBtn #redoBtn #boxToolbar #inputMode #samDecode #isolateBtn #samStatus #saveOutputBtn #downloadBtn #exportStatus #stageHint`.
 `#addObjectBtn` opens a menu: click `#addObjectMenu button[data-type=point|box]`.
-Mode toggle (top bar): `#modeToggle button[data-mode=edit|view]`. Box rows have `.render-btn` + `.render-status` (`✓` fresh, `stale` after a box edit).
+Mode toggle (top bar): `#modeToggle button[data-mode=edit|view]`. Box rows have `.render-btn` + `.render-status` (`✓` fresh, `stale` after a box edit). Point rows have a `.render-btn` "→ Box" (shows `n/N` while running): MobileSAM on each point keyframe → new box object `<name> box` (one undo entry); the video seeks through the points and returns.
 
 Recipe that works:
 - Wait for load: `page.waitForFunction(() => document.getElementById('video')?.videoWidth > 0)`.

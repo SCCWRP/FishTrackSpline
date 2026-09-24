@@ -103,6 +103,32 @@ async function pump() {
   }
 }
 
+// Encode the displayed (paused) frame now and resolve with its key once the
+// server has its embedding; null if the frame changed underneath or it failed.
+export async function embedCurrentFrame() {
+  if (!available || !onStillFrame()) return null;
+  const key = frameKey();
+  if (ready.has(key)) return key;
+  const url = `/api/sam/embed?key=${encodeURIComponent(key)}`;
+  try {
+    if (!(await fetch(url, { method: 'HEAD' })).ok) {
+      if (key !== frameKey() || !onStillFrame()) return null;
+      const res = await fetch(url, { method: 'POST', body: await captureFrame(video), headers: { 'Content-Type': 'image/png' } });
+      if (!res.ok) return null;
+    }
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+  ready.add(key);
+  return key;
+}
+
+// Status message for the frame on screen.
+export function samNotice(text) {
+  say(frameKey(), text);
+}
+
 // The current frame's key when a SAM prompt can run now (paused + embedded);
 // otherwise null, after starting the encode if needed (status explains why).
 export function samPromptKey() {
