@@ -1,4 +1,4 @@
-// Export points as JSON + CSV: POST to the server (_OUTPUT/) or browser download.
+// Export keyframes as JSON + CSVs (points, boxes): POST to the server (_OUTPUT/) or browser download.
 
 import { state } from './state.js';
 
@@ -16,7 +16,15 @@ export function toJSON() {
         id: o.id,
         name: o.name,
         color: o.color,
-        points: o.points.map((p) => ({ t: p.t, x: p.x, y: p.y })),
+        type: o.type,
+        ...(o.type === 'box'
+          ? {
+            boxes: o.boxes.map((b) => ({
+              t: b.t, x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2,
+              source: b.source, edited: b.edited, prompts: b.prompts,
+            })),
+          }
+          : { points: o.points.map((p) => ({ t: p.t, x: p.x, y: p.y })) }),
       })),
     },
     null,
@@ -32,6 +40,7 @@ export function toCSV() {
   const { width, height } = state.video;
   const lines = ['object,time,x_norm,y_norm,x_px,y_px'];
   for (const obj of state.objects) {
+    if (obj.type !== 'point') continue;
     for (const p of obj.points) {
       lines.push([
         csvQuote(obj.name),
@@ -40,6 +49,30 @@ export function toCSV() {
         p.y.toFixed(3),
         (p.x * width).toFixed(1),
         (p.y * height).toFixed(1),
+      ].join(','));
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+export function toBoxesCSV() {
+  const { width, height } = state.video;
+  const dims = ['x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'w', 'h'];
+  const lines = [[
+    'object', 'time', ...dims.map((d) => `${d}_norm`), ...dims.map((d) => `${d}_px`), 'source', 'edited',
+  ].join(',')];
+  for (const obj of state.objects) {
+    if (obj.type !== 'box') continue;
+    for (const b of obj.boxes) {
+      const v = [b.x1, b.y1, b.x2, b.y2, (b.x1 + b.x2) / 2, (b.y1 + b.y2) / 2, b.x2 - b.x1, b.y2 - b.y1];
+      const scale = [width, height, width, height, width, height, width, height];
+      lines.push([
+        csvQuote(obj.name),
+        b.t.toFixed(3),
+        ...v.map((x) => x.toFixed(3)),
+        ...v.map((x, i) => (x * scale[i]).toFixed(1)),
+        b.source,
+        b.edited,
       ].join(','));
     }
   }
@@ -60,7 +93,8 @@ export async function saveToOutput() {
   const base = videoBasename();
   const savedJson = await postExport(`${base}_points.json`, toJSON());
   const savedCsv = await postExport(`${base}_points.csv`, toCSV());
-  return [savedJson, savedCsv];
+  const savedBoxes = await postExport(`${base}_boxes.csv`, toBoxesCSV());
+  return [savedJson, savedCsv, savedBoxes];
 }
 
 function downloadBlob(filename, mime, text) {
@@ -76,4 +110,5 @@ export function download() {
   const base = videoBasename();
   downloadBlob(`${base}_points.json`, 'application/json', toJSON());
   downloadBlob(`${base}_points.csv`, 'text/csv', toCSV());
+  downloadBlob(`${base}_boxes.csv`, 'text/csv', toBoxesCSV());
 }

@@ -1,9 +1,10 @@
 // Bootstrap: video source from ?video=, stage sizing, rAF loop, export buttons.
 
-import { state, addObject } from './state.js';
+import { state, addObject, resetHistory } from './state.js';
 import { initOverlay, draw } from './overlay.js';
-import { initUI, tick } from './ui.js';
+import { initUI, tick, applySamAvailability } from './ui.js';
 import { saveToOutput, download } from './export.js';
+import { initSam } from './sam/client.js';
 
 const DEFAULT_VIDEO = '720p/GOPR7611_trim_720_16s.mp4';
 
@@ -31,7 +32,9 @@ video.addEventListener('error', () => {
 
 initUI(video);
 initOverlay(video, canvas);
-addObject(); // start with "fish 1" active
+addObject(); // start with "fish 1" (a point object) active
+resetHistory(); // ...which is not an undoable edit
+initSam(video).then(applySamAvailability);
 
 function frame() {
   const now = video.currentTime;
@@ -56,5 +59,5 @@ document.getElementById('saveOutputBtn').addEventListener('click', async () => {
 
 document.getElementById('downloadBtn').addEventListener('click', () => {
   download();
-  exportStatus.textContent = 'Downloaded JSON + CSV';
+  exportStatus.textContent = 'Downloaded JSON + 2 CSVs';
 });

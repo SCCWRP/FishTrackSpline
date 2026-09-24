@@ -41,23 +41,20 @@ function evalSegment(ts, vs, M, i, t) {
   return vs[i] + b * s + c * s * s + d * s * s * s;
 }
 
-// points: sorted by t, no duplicate times (enforced by addPoint's EPS_T replace).
-// Returns { t0, t1, evalAt(t) -> {x, y} } or null when there are no points.
+// ts: strictly increasing keyframe times (no duplicates, enforced by the EPS_T
+// replace rule); channels: arrays of values, one per ts. Returns
+// { t0, t1, evalAt(t) -> number[] } or null when there are no keyframes.
 // evalAt clamps t to [t0, t1] — the trajectory is never extrapolated.
-export function buildTrajectory(points) {
-  const n = points.length;
+export function buildTrajectory(ts, channels) {
+  const n = ts.length;
   if (n === 0) return null;
-  const t0 = points[0].t;
-  const t1 = points[n - 1].t;
+  const t0 = ts[0];
+  const t1 = ts[n - 1];
 
   if (n === 1) {
-    const { x, y } = points[0];
-    return { t0, t1, evalAt: () => ({ x, y }) };
+    const v = channels.map((c) => c[0]);
+    return { t0, t1, evalAt: () => v.slice() };
   }
-
-  const ts = points.map((p) => p.t);
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
 
   if (n === 2) {
     return {
@@ -65,13 +62,12 @@ export function buildTrajectory(points) {
       t1,
       evalAt(t) {
         const u = (clamp(t, t0, t1) - t0) / Math.max(t1 - t0, 1e-6);
-        return { x: xs[0] + u * (xs[1] - xs[0]), y: ys[0] + u * (ys[1] - ys[0]) };
+        return channels.map((c) => c[0] + u * (c[1] - c[0]));
       },
     };
   }
 
-  const Mx = solveNaturalCubic(ts, xs);
-  const My = solveNaturalCubic(ts, ys);
+  const Ms = channels.map((c) => solveNaturalCubic(ts, c));
 
   return {
     t0,
@@ -79,7 +75,48 @@ export function buildTrajectory(points) {
     evalAt(t) {
       const tc = clamp(t, t0, t1);
       const i = findSegment(ts, tc);
-      return { x: evalSegment(ts, xs, Mx, i, tc), y: evalSegment(ts, ys, My, i, tc) };
+      return channels.map((c, k) => evalSegment(ts, c, Ms[k], i, tc));
+    },
+  };
+}
+
+// Point object: x(t), y(t). evalAt -> {x, y}.
+export function pointTrajectory(points) {
+  const traj = buildTrajectory(points.map((p) => p.t), [points.map((p) => p.x), points.map((p) => p.y)]);
+  if (!traj) return null;
+  return {
+    t0: traj.t0,
+    t1: traj.t1,
+    evalAt(t) {
+      const [x, y] = traj.evalAt(t);
+      return { x, y };
+    },
+  };
+}
+
+// Box object: interpolated as center + size (cx, cy, w, h) — same shape as
+// corner interpolation since the spline is linear in its values — with w, h
+// clamped >= 0 against overshoot. evalAt -> center {x, y}; evalBoxAt -> corners.
+export function boxTrajectory(boxes) {
+  const traj = buildTrajectory(boxes.map((b) => b.t), [
+    boxes.map((b) => (b.x1 + b.x2) / 2),
+    boxes.map((b) => (b.y1 + b.y2) / 2),
+    boxes.map((b) => b.x2 - b.x1),
+    boxes.map((b) => b.y2 - b.y1),
+  ]);
+  if (!traj) return null;
+  return {
+    t0: traj.t0,
+    t1: traj.t1,
+    evalAt(t) {
+      const [x, y] = traj.evalAt(t);
+      return { x, y };
+    },
+    evalBoxAt(t) {
+      const [cx, cy, w, h] = traj.evalAt(t);
+      const hw = Math.max(w, 0) / 2;
+      const hh = Math.max(h, 0) / 2;
+      return { x1: cx - hw, y1: cy - hh, x2: cx + hw, y2: cy + hh };
     },
   };
 }
@@ -112,11 +149,13 @@ export function sampleTrajectory(traj) {
   return samples;
 }
 
-// Cached accessor; state.js clears obj._cache on any point mutation.
+// Cached accessor; state.js clears obj._cache on any keyframe mutation.
+// samples are {t, x, y} (the center for box objects) for drawing the path.
 export function trajectoryOf(obj) {
   if (!obj._cache) {
-    const traj = buildTrajectory(obj.points);
-    obj._cache = { traj, samples: traj && obj.points.length >= 2 ? sampleTrajectory(traj) : null };
+    const keys = obj.type === 'box' ? obj.boxes : obj.points;
+    const traj = obj.type === 'box' ? boxTrajectory(keys) : pointTrajectory(keys);
+    obj._cache = { traj, samples: traj && keys.length >= 2 ? sampleTrajectory(traj) : null };
   }
   return obj._cache;
 }

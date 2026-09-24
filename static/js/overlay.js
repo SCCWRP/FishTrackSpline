@@ -1,14 +1,16 @@
-// Canvas overlay: DPR-aware sizing, normalized-coordinate mapping, per-frame
-// drawing with temporal opacity falloff, and all pointer interactions.
+// Canvas overlay: DPR-aware sizing, per-frame drawing with temporal opacity
+// falloff, and pointer dispatch to the input tools (static/js/tools/).
 
-import {
-  state, HIT_RADIUS, alphaForDt,
-  getActiveObject, setActiveObject, addPoint, movePoint, deletePoint,
-} from './state.js';
+import { state, HIT_RADIUS, alphaForDt, getActiveObject, setActiveObject, boxAt } from './state.js';
 import { trajectoryOf } from './spline.js';
+import { drawMask } from './sam/client.js';
+import { initToolEnv, localPx } from './tools/common.js';
+import * as pointTool from './tools/pointTool.js';
+import * as boxEdit from './tools/boxEdit.js';
+import * as boxDrawTool from './tools/boxDrawTool.js';
+import * as samPointsTool from './tools/samPointsTool.js';
 
 const ALPHA_LEVELS = 16; // spline fade quantization — batches segments into few strokes
-const DRAG_CLICK_PX = 3; // release under this total movement = click (seek), not drag
 
 let video;
 let canvas;
@@ -18,6 +20,7 @@ export function initOverlay(videoEl, canvasEl) {
   video = videoEl;
   canvas = canvasEl;
   ctx = canvas.getContext('2d');
+  initToolEnv(video, canvas);
 
   const ro = new ResizeObserver(resize);
   ro.observe(canvas);
@@ -36,18 +39,6 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS px
 }
 
-function clamp01(v) {
-  return Math.min(Math.max(v, 0), 1);
-}
-
-function clientToNorm(e) {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: clamp01((e.clientX - r.left) / r.width),
-    y: clamp01((e.clientY - r.top) / r.height),
-  };
-}
-
 // ---------- drawing ----------
 
 export function draw(now) {
@@ -56,17 +47,29 @@ export function draw(now) {
   const h = r.height;
   ctx.clearRect(0, 0, w, h);
 
+  const cur = boxEdit.currentKeyframe();
+  if (cur) drawMask(ctx, cur.obj, cur.box, w, h);
+
   for (const obj of state.objects) {
     if (!obj.visible) continue;
-    const { traj, samples } = trajectoryOf(obj);
     const isActive = obj.id === state.activeObjectId;
-
+    if (obj.type === 'box') {
+      drawBoxObject(obj, isActive, now, w, h);
+      continue;
+    }
+    const { traj, samples } = trajectoryOf(obj);
     if (samples) drawSpline(obj, samples, now, w, h);
     drawPoints(obj, isActive, now, w, h);
     if (traj && now >= traj.t0 && now <= traj.t1 && obj.points.length >= 2) {
       drawCrosshair(obj, traj.evalAt(now), w, h);
     }
   }
+
+  if (cur) {
+    samPointsTool.drawPromptMarkers(ctx, w, h);
+    boxEdit.draw(ctx, now, w, h);
+  }
+  boxDrawTool.draw(ctx, now, w, h);
   ctx.globalAlpha = 1;
 }
 
@@ -133,87 +136,81 @@ function drawCrosshair(obj, pos, w, h) {
   ctx.stroke();
 }
 
+// Center path, keyframe rectangles faded by time distance, and the interpolated
+// box (dashed) between keyframes.
+function drawBoxObject(obj, isActive, now, w, h) {
+  const { traj, samples } = trajectoryOf(obj);
+  if (samples) drawSpline(obj, samples, now, w, h);
+
+  ctx.strokeStyle = obj.color;
+  ctx.lineWidth = isActive ? 2 : 1.5;
+  for (const b of obj.boxes) {
+    ctx.globalAlpha = alphaForDt(b.t - now);
+    ctx.strokeRect(b.x1 * w, b.y1 * h, (b.x2 - b.x1) * w, (b.y2 - b.y1) * h);
+  }
+
+  const b = interpolatedBox(obj, traj, now);
+  if (b) {
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(b.x1 * w, b.y1 * h, (b.x2 - b.x1) * w, (b.y2 - b.y1) * h);
+    ctx.setLineDash([]);
+  }
+}
+
+function interpolatedBox(obj, traj, now) {
+  if (!traj || obj.boxes.length < 2 || now < traj.t0 || now > traj.t1 || boxAt(obj, now)) return null;
+  return traj.evalBoxAt(now);
+}
+
 // ---------- interaction ----------
 
-// Nearest point within HIT_RADIUS; the active object's points win over others'.
-function hitTest(e) {
-  const r = canvas.getBoundingClientRect();
-  const px = e.clientX - r.left;
-  const py = e.clientY - r.top;
+function currentTool() {
+  if (getActiveObject()?.type !== 'box') return pointTool;
+  return state.inputMode === 'sam-points' ? samPointsTool : boxDrawTool;
+}
 
-  let best = null;
+// Another visible box object whose displayed box (keyframe or interpolated) has
+// an edge under the pointer — clicking it selects that object.
+function otherBoxEdgeAt(e) {
+  const { px, py, w, h } = localPx(e);
+  const r = HIT_RADIUS;
   for (const obj of state.objects) {
-    if (!obj.visible) continue;
-    const isActive = obj.id === state.activeObjectId;
-    for (const p of obj.points) {
-      const d = Math.hypot(p.x * r.width - px, p.y * r.height - py);
-      if (d > HIT_RADIUS) continue;
-      if (!best || (isActive && !best.isActive) || (isActive === best.isActive && d < best.d)) {
-        best = { obj, p, d, isActive };
-      }
+    if (!obj.visible || obj.type !== 'box' || obj.id === state.activeObjectId) continue;
+    const now = video.currentTime;
+    const b = boxAt(obj, now) ?? interpolatedBox(obj, trajectoryOf(obj).traj, now);
+    if (!b) continue;
+    const x1 = b.x1 * w, x2 = b.x2 * w, y1 = b.y1 * h, y2 = b.y2 * h;
+    if (px < x1 - r || px > x2 + r || py < y1 - r || py > y2 + r) continue;
+    if (Math.abs(px - x1) <= r || Math.abs(px - x2) <= r || Math.abs(py - y1) <= r || Math.abs(py - y2) <= r) {
+      return obj;
     }
   }
-  return best;
+  return null;
 }
 
 function onPointerDown(e) {
   if (e.button !== 0 || !state.video.duration) return;
-  const hit = hitTest(e);
-
-  if (!hit) {
-    const active = getActiveObject();
-    if (!active) return;
-    const { x, y } = clientToNorm(e);
-    addPoint(active.id, video.currentTime, x, y);
+  if (getActiveObject()?.type === 'box' && boxEdit.onPointerDown(e)) return;
+  const other = otherBoxEdgeAt(e);
+  if (other) {
+    setActiveObject(other.id);
     return;
   }
-
-  if (!hit.isActive) {
-    setActiveObject(hit.obj.id);
-    video.currentTime = hit.p.t;
-    return;
-  }
-
-  startDrag(e, hit.obj, hit.p);
-}
-
-function startDrag(e, obj, point) {
-  canvas.setPointerCapture(e.pointerId);
-  canvas.classList.add('dragging');
-  let moved = 0;
-  let lastX = e.clientX;
-  let lastY = e.clientY;
-
-  const onMove = (ev) => {
-    moved += Math.hypot(ev.clientX - lastX, ev.clientY - lastY);
-    lastX = ev.clientX;
-    lastY = ev.clientY;
-    if (moved >= DRAG_CLICK_PX) {
-      const { x, y } = clientToNorm(ev);
-      movePoint(obj.id, point, x, y);
-    }
-  };
-
-  const onUp = () => {
-    canvas.releasePointerCapture(e.pointerId);
-    canvas.classList.remove('dragging');
-    canvas.removeEventListener('pointermove', onMove);
-    canvas.removeEventListener('pointerup', onUp);
-    canvas.removeEventListener('pointercancel', onUp);
-    if (moved < DRAG_CLICK_PX) video.currentTime = point.t;
-  };
-
-  canvas.addEventListener('pointermove', onMove);
-  canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', onUp);
+  currentTool().onPointerDown(e);
 }
 
 function onHoverMove(e) {
-  canvas.classList.toggle('over-point', !canvas.classList.contains('dragging') && !!hitTest(e));
+  if (canvas.classList.contains('dragging')) return;
+  const cursor = (getActiveObject()?.type === 'box' && boxEdit.onHover(e))
+    || (otherBoxEdgeAt(e) && 'pointer')
+    || currentTool().onHover(e);
+  canvas.style.cursor = cursor || '';
 }
 
 function onContextMenu(e) {
   e.preventDefault();
-  const hit = hitTest(e);
-  if (hit) deletePoint(hit.obj.id, hit.p);
+  if (!state.video.duration) return;
+  currentTool().onContextMenu(e);
 }

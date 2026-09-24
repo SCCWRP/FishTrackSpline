@@ -1,14 +1,19 @@
-// Sidebar (objects panel + points table) rendering and transport bar wiring.
+// Sidebar (objects panel + keyframe table) rendering, transport bar wiring,
+// and the box-object toolbar (input mode, SAM decode location, SAM status).
 
 import {
   state, FRAME_STEP,
   getActiveObject, addObject, renameObject, deleteObject, setActiveObject,
-  toggleVisible, deletePoint, subscribe,
+  toggleVisible, deletePoint, deleteBox, keysOf, subscribe,
+  setInputMode, setSamDecode, undo, redo, canUndo, canRedo,
 } from './state.js';
+import { samAvailable, samStatusText } from './sam/client.js';
+
+const SAM_UNAVAILABLE_TIP = 'MobileSAM models not found on the server';
 
 let video;
 const els = {};
-let tableRows = []; // [{ tr, point }] for the active object, sorted by t
+let tableRows = []; // [{ tr, key }] for the active object, sorted by t
 let highlightedRow = null;
 let scrubbing = false;
 
@@ -16,17 +21,60 @@ export function initUI(videoEl) {
   video = videoEl;
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
-    'addObjectBtn', 'objectList', 'pointsCaption', 'pointsBody', 'stageHint',
+    'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
+    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'samStatus',
   ]) {
     els[id] = document.getElementById(id);
   }
 
   wireTransport();
   wireKeyboard();
-  els.addObjectBtn.addEventListener('click', () => addObject());
+  wireAddMenu();
+  wireBoxToolbar();
+  els.undoBtn.addEventListener('click', undo);
+  els.redoBtn.addEventListener('click', redo);
 
   subscribe(renderSidebar);
   renderSidebar();
+}
+
+// ---------- add object (type menu) ----------
+
+function wireAddMenu() {
+  els.addObjectBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    els.addObjectMenu.classList.toggle('hidden');
+  });
+  for (const btn of els.addObjectMenu.querySelectorAll('button')) {
+    btn.addEventListener('click', () => {
+      els.addObjectMenu.classList.add('hidden');
+      addObject(btn.dataset.type);
+    });
+  }
+  document.addEventListener('click', (e) => {
+    if (!els.addObjectMenu.contains(e.target)) els.addObjectMenu.classList.add('hidden');
+  });
+}
+
+// ---------- box toolbar ----------
+
+function wireBoxToolbar() {
+  els.inputMode.addEventListener('change', () => setInputMode(els.inputMode.value));
+  els.samDecode.addEventListener('change', () => setSamDecode(els.samDecode.value));
+}
+
+// Called once the /api/sam/status check finishes.
+export function applySamAvailability() {
+  const ok = samAvailable();
+  for (const opt of els.inputMode.options) {
+    if (!opt.value.startsWith('sam')) continue;
+    opt.disabled = !ok;
+    opt.title = ok ? '' : SAM_UNAVAILABLE_TIP;
+  }
+  els.samDecode.disabled = !ok;
+  els.samDecode.title = ok ? '' : SAM_UNAVAILABLE_TIP;
+  if (!ok && state.inputMode.startsWith('sam')) setInputMode('manual-box');
+  else renderSidebar();
 }
 
 // ---------- transport ----------
@@ -77,15 +125,25 @@ function wireKeyboard() {
       step(FRAME_STEP);
     } else if (e.code === 'Delete' || e.code === 'Backspace') {
       const obj = getActiveObject();
-      if (!obj || !obj.points.length) return;
-      const nearest = obj.points.reduce((a, b) =>
+      if (!obj || !keysOf(obj).length) return;
+      const nearest = keysOf(obj).reduce((a, b) =>
         Math.abs(a.t - video.currentTime) < Math.abs(b.t - video.currentTime) ? a : b);
       if (Math.abs(nearest.t - video.currentTime) < 0.04) {
         e.preventDefault();
-        deletePoint(obj.id, nearest);
+        deleteKey(obj, nearest);
       }
     }
   });
+}
+
+function deleteKey(obj, key) {
+  if (obj.type === 'box') deleteBox(obj.id, key);
+  else deletePoint(obj.id, key);
+}
+
+function keyNoun(obj, n) {
+  const noun = obj.type === 'box' ? 'box' : 'point';
+  return `${n} ${noun}${n === 1 ? '' : obj.type === 'box' ? 'es' : 's'}`;
 }
 
 function formatTime(t) {
@@ -100,10 +158,27 @@ function formatTime(t) {
 function renderSidebar() {
   renderObjects();
   renderTable();
+  renderToolbar();
+  els.undoBtn.disabled = !canUndo();
+  els.redoBtn.disabled = !canRedo();
+  els.stageHint.textContent = hintText();
   els.stageHint.classList.toggle(
     'hidden',
-    state.objects.some((o) => o.points.length > 0),
+    state.objects.some((o) => keysOf(o).length > 0),
   );
+}
+
+function hintText() {
+  const obj = getActiveObject();
+  if (obj?.type !== 'box') return 'Click on the video to add a point for the active object';
+  if (state.inputMode === 'sam-points') return 'Pause, then click the fish to prompt SAM (right-click = negative point)';
+  return 'Drag on the video to draw a box for the active object';
+}
+
+function renderToolbar() {
+  els.boxToolbar.classList.toggle('hidden', getActiveObject()?.type !== 'box');
+  els.inputMode.value = state.inputMode;
+  els.samDecode.value = state.samDecode;
 }
 
 function renderObjects() {
@@ -117,6 +192,10 @@ function renderObjects() {
     swatch.className = 'object-swatch';
     swatch.style.background = obj.color;
 
+    const badge = document.createElement('span');
+    badge.className = 'object-type';
+    badge.textContent = obj.type === 'box' ? 'box' : 'pt';
+
     const name = document.createElement('span');
     name.className = 'object-name';
     name.textContent = obj.name;
@@ -128,7 +207,9 @@ function renderObjects() {
 
     const count = document.createElement('span');
     count.className = 'object-count';
-    count.textContent = `${obj.points.length} pt${obj.points.length === 1 ? '' : 's'}`;
+    count.textContent = obj.type === 'box'
+      ? `${obj.boxes.length} box${obj.boxes.length === 1 ? '' : 'es'}`
+      : `${obj.points.length} pt${obj.points.length === 1 ? '' : 's'}`;
 
     const eye = iconBtn(obj.visible ? '👁' : '👁', 'Toggle visibility', (e) => {
       e.stopPropagation();
@@ -138,12 +219,12 @@ function renderObjects() {
 
     const del = iconBtn('✕', 'Delete object', (e) => {
       e.stopPropagation();
-      if (confirm(`Delete "${obj.name}" and its ${obj.points.length} points?`)) {
+      if (confirm(`Delete "${obj.name}" and its ${keyNoun(obj, keysOf(obj).length)}?`)) {
         deleteObject(obj.id);
       }
     });
 
-    li.append(swatch, name, count, eye, del);
+    li.append(swatch, badge, name, count, eye, del);
     els.objectList.appendChild(li);
   }
 }
@@ -177,52 +258,68 @@ function startRename(nameEl, obj) {
   input.addEventListener('click', (e) => e.stopPropagation());
 }
 
+const COLUMNS = {
+  point: ['time (s)', 'x', 'y'],
+  box: ['time (s)', 'cx', 'cy', 'w', 'h', 'source'],
+};
+
 function renderTable() {
   const obj = getActiveObject();
-  els.pointsCaption.textContent = obj
-    ? `${obj.points.length} point${obj.points.length === 1 ? '' : 's'} — ${obj.name}`
-    : 'Points';
+  const keys = obj ? keysOf(obj) : [];
+  els.pointsCaption.textContent = obj ? `${keyNoun(obj, keys.length)} — ${obj.name}` : 'Points';
+  const cols = COLUMNS[obj?.type === 'box' ? 'box' : 'point'];
+  els.pointsHead.innerHTML = `<tr>${[...cols, ''].map((c) => `<th>${c}</th>`).join('')}</tr>`;
+  els.pointsHead.parentElement.classList.toggle('boxes', obj?.type === 'box');
   els.pointsBody.textContent = '';
   tableRows = [];
   highlightedRow = null;
 
-  if (!obj || obj.points.length === 0) {
+  if (!obj || keys.length === 0) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 4;
+    td.colSpan = cols.length + 1;
     td.className = 'points-empty';
-    td.textContent = obj ? 'Click the video to add points' : 'Add an object first';
+    td.textContent = !obj ? 'Add an object first'
+      : obj.type === 'box' ? 'Draw a box on the video' : 'Click the video to add points';
     tr.appendChild(td);
     els.pointsBody.appendChild(tr);
     return;
   }
 
-  for (const p of obj.points) {
+  for (const k of keys) {
     const tr = document.createElement('tr');
-
-    const tdT = document.createElement('td');
-    tdT.textContent = p.t.toFixed(2);
-    const tdX = document.createElement('td');
-    tdX.textContent = p.x.toFixed(3);
-    const tdY = document.createElement('td');
-    tdY.textContent = p.y.toFixed(3);
+    const values = obj.type === 'box'
+      ? [
+        k.t.toFixed(2),
+        ((k.x1 + k.x2) / 2).toFixed(3),
+        ((k.y1 + k.y2) / 2).toFixed(3),
+        (k.x2 - k.x1).toFixed(3),
+        (k.y2 - k.y1).toFixed(3),
+        k.source + (k.edited ? ' ✎' : ''),
+      ]
+      : [k.t.toFixed(2), k.x.toFixed(3), k.y.toFixed(3)];
+    for (const v of values) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
 
     const tdActions = document.createElement('td');
     const seek = document.createElement('button');
     seek.className = 'row-btn';
     seek.textContent = '⌖';
-    seek.title = 'Seek to this point';
-    seek.addEventListener('click', () => { video.currentTime = p.t; });
+    seek.title = 'Seek to this keyframe';
+    seek.addEventListener('click', () => { video.currentTime = k.t; });
     const del = document.createElement('button');
     del.className = 'row-btn';
     del.textContent = '✕';
-    del.title = 'Delete point';
-    del.addEventListener('click', () => deletePoint(obj.id, p));
+    del.title = 'Delete keyframe';
+    del.addEventListener('click', () => deleteKey(obj, k));
     tdActions.append(seek, del);
 
-    tr.append(tdT, tdX, tdY, tdActions);
+    tr.appendChild(tdActions);
     els.pointsBody.appendChild(tr);
-    tableRows.push({ tr, point: p });
+    tableRows.push({ tr, key: k });
   }
 }
 
@@ -232,9 +329,14 @@ export function tick(now) {
   els.timeReadout.textContent = `${formatTime(now)} / ${formatTime(video.duration)}`;
   if (!scrubbing) els.scrubber.value = now;
 
+  if (!els.boxToolbar.classList.contains('hidden')) {
+    const status = samStatusText();
+    if (els.samStatus.textContent !== status) els.samStatus.textContent = status;
+  }
+
   let nearest = null;
   for (const row of tableRows) {
-    if (!nearest || Math.abs(row.point.t - now) < Math.abs(nearest.point.t - now)) {
+    if (!nearest || Math.abs(row.key.t - now) < Math.abs(nearest.key.t - now)) {
       nearest = row;
     }
   }

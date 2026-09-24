@@ -14,6 +14,22 @@
         <canvas id="overlay"></canvas>
         <div class="stage-hint" id="stageHint">Click on the video to add a point for the active object</div>
       </div>
+      <div class="box-toolbar hidden" id="boxToolbar">
+        <label>Input
+          <select id="inputMode">
+            <option value="manual-box">Manual box</option>
+            <option value="sam-box">SAM box</option>
+            <option value="sam-points">SAM points</option>
+          </select>
+        </label>
+        <label>SAM decode
+          <select id="samDecode">
+            <option value="server">Server</option>
+            <option value="browser">Browser</option>
+          </select>
+        </label>
+        <span class="sam-status" id="samStatus"></span>
+      </div>
       <div class="transport">
         <button id="playBtn" title="Play/Pause (Space)">▶</button>
         <button id="stepBack" title="Step back 1 frame (←)">⟨</button>
@@ -26,6 +42,8 @@
           <option value="1" selected>1×</option>
           <option value="2">2×</option>
         </select>
+        <button id="undoBtn" title="Undo" disabled>↶</button>
+        <button id="redoBtn" title="Redo" disabled>↷</button>
       </div>
     </section>
 
@@ -33,7 +51,13 @@
       <section class="panel">
         <header class="panel-header">
           <h2>Objects</h2>
-          <button id="addObjectBtn">＋ Add object</button>
+          <div class="add-object">
+            <button id="addObjectBtn">＋ Add object</button>
+            <div class="add-menu hidden" id="addObjectMenu">
+              <button data-type="point">Point</button>
+              <button data-type="box">Box</button>
+            </div>
+          </div>
         </header>
         <ul class="object-list" id="objectList"></ul>
       </section>
@@ -44,9 +68,7 @@
         </header>
         <div class="table-wrap">
           <table class="points-table">
-            <thead>
-              <tr><th>time (s)</th><th>x</th><th>y</th><th></th></tr>
-            </thead>
+            <thead id="pointsHead"></thead>
             <tbody id="pointsBody"></tbody>
           </table>
         </div>
