@@ -176,7 +176,7 @@ function renderSidebar() {
   els.stageHint.textContent = state.video.notice || hintText();
   els.stageHint.classList.toggle(
     'hidden',
-    !state.video.notice && (!editing || state.objects.some((o) => keysOf(o).length > 0)),
+    !state.video.notice && (!editing || !getActiveObject() || state.objects.some((o) => keysOf(o).length > 0)),
   );
 }
 
