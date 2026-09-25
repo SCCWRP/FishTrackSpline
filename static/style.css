@@ -203,6 +203,8 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
+.sam-status.not-encoded { background: #4a1414; border-color: #7a1f1f; color: #ff5c5c; }
+.sam-status.ready { background: #123d22; border-color: #1f6b3a; color: #4ade80; }
 
 .sidebar {
   width: 340px;

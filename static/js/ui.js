@@ -395,7 +395,12 @@ export function tick(now) {
 
   if (!els.boxToolbar.classList.contains('hidden')) {
     const status = samStatusText();
-    if (els.samStatus.textContent !== status) els.samStatus.textContent = status;
+    if (els.samStatus.textContent !== status) {
+      els.samStatus.textContent = status;
+      // red until this frame's embedding exists, green once it's ready to prompt
+      els.samStatus.classList.toggle('not-encoded', status === 'Not encoded');
+      els.samStatus.classList.toggle('ready', status === 'Ready');
+    }
   }
 
   let nearest = null;
