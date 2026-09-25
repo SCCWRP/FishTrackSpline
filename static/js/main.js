@@ -54,8 +54,27 @@ resetHistory(); // ...which is not an undoable edit
 initSam(video).then(applySamAvailability);
 initLibrary();
 
+// While playing, video.currentTime (the media clock) runs a fraction of a frame
+// off the frame actually on screen. Keep drawing from the smooth clock every
+// animation frame, minus a running average of that offset, measured on each
+// presented frame (requestVideoFrameCallback). Paused/seeking: currentTime as-is.
+const OFFSET_SMOOTHING = 0.1; // EMA weight of each new measurement
+const MAX_OFFSET = 0.1;       // s — ignore outliers (e.g. right after a seek)
+let clockOffset = 0;
+// ?sync=raw turns the correction off (for A/B comparison).
+const correctClock = new URLSearchParams(location.search).get('sync') !== 'raw';
+if (correctClock && 'requestVideoFrameCallback' in video) {
+  const onVideoFrame = (_now, meta) => {
+    const d = video.currentTime - meta.mediaTime;
+    if (!video.paused && Math.abs(d) < MAX_OFFSET) clockOffset += OFFSET_SMOOTHING * (d - clockOffset);
+    video.requestVideoFrameCallback(onVideoFrame);
+  };
+  video.requestVideoFrameCallback(onVideoFrame);
+  video.addEventListener('seeking', () => { clockOffset = 0; });
+}
+
 function frame() {
-  const now = video.currentTime;
+  const now = video.paused || video.seeking ? video.currentTime : Math.max(0, video.currentTime - clockOffset);
   draw(now);
   tick(now);
   requestAnimationFrame(frame);
