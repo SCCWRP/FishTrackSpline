@@ -1,8 +1,8 @@
 // Bootstrap: video source from ?video= (a file in _UPLOADS; default: the first
 // one), stage sizing, rAF loop, export buttons.
 
-import { state, refresh } from './state.js';
-import { initLibrary, markSaved, refreshSets, videoIdFromParam } from './library.js';
+import { state, refresh, subscribe } from './state.js';
+import { initLibrary, markSaved, refreshSets, videoIdFromParam, hasUnsavedChanges } from './library.js';
 import { initOverlay, draw } from './overlay.js';
 import { initUI, tick, applySamAvailability } from './ui.js';
 import { saveToOutput, download } from './export.js';
@@ -94,7 +94,16 @@ document.getElementById('saveOutputBtn').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('downloadBtn').addEventListener('click', () => {
-  download();
-  exportStatus.textContent = 'Downloaded JSON + 2 CSVs';
+// Download = the saved set's zip, so only while the annotations match a saved set.
+const downloadBtn = document.getElementById('downloadBtn');
+function updateDownloadBtn() {
+  downloadBtn.disabled = !state.loadedSet || hasUnsavedChanges();
+}
+subscribe(updateDownloadBtn);
+updateDownloadBtn();
+
+downloadBtn.addEventListener('click', () => {
+  if (downloadBtn.disabled) return;
+  download(state.loadedSet);
+  exportStatus.textContent = `Downloading ${state.loadedSet.uuid}.zip (v${state.loadedSet.version})`;
 });

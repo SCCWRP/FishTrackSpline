@@ -1,7 +1,7 @@
 // Export keyframes as JSON + CSVs (points, boxes), plus box tracks as CVAT for
-// video XML and YOLO labels: saved on the server as a new versioned annotation
-// set (_OUTPUT/<uuid>/, indexed in _OUTPUT/annotation_sets.json), or (JSON +
-// CSVs only) downloaded in the browser.
+// video XML and YOLO labels, saved on the server as a new versioned annotation
+// set (_OUTPUT/<uuid>/, indexed in _OUTPUT/annotation_sets.json). Download
+// fetches a saved set's folder as a zip.
 
 import { state, setLoadedSet } from './state.js';
 import { boxTracks, toCvatXml, toYoloLabels } from './formats.js';
@@ -93,7 +93,7 @@ async function ensureVideoInfo() {
   state.video.frames = info.frames;
 }
 
-// Writes a new _OUTPUT/<uuid>/{JSON, CSVs, ground_truth/annotations.xml,
+// Writes a new _OUTPUT/<uuid>/{annotation_set.json, CSVs, ground_truth/annotations.xml,
 // yolo-labels/*.txt}; the server assigns the uuid and the video's next version.
 // Resolves with the set's index entry.
 export async function saveToOutput() {
@@ -102,7 +102,7 @@ export async function saveToOutput() {
   const { width, height, fps, frames } = state.video;
   const tracks = boxTracks(state.objects, { fps, frames });
   const files = {
-    [`${stem}_points.json`]: toJSON(),
+    'annotation_set.json': toJSON(),
     [`${stem}_points.csv`]: toCSV(),
     [`${stem}_boxes.csv`]: toBoxesCSV(),
     'ground_truth/annotations.xml': toCvatXml(tracks, { name: stem, width, height, frames }),
@@ -120,18 +120,10 @@ export async function saveToOutput() {
   return { set, labels: Object.keys(files).length - 4 };
 }
 
-function downloadBlob(filename, mime, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+// The whole _OUTPUT/<uuid>/ folder as <uuid>.zip (also kept on the server).
+export function download(set) {
   const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
+  a.href = `/api/annotation-sets/${encodeURIComponent(set.uuid)}/download`;
+  a.download = `${set.uuid}.zip`;
   a.click();
-  URL.revokeObjectURL(url);
-}
-
-export function download() {
-  const base = videoBasename();
-  downloadBlob(`${base}_points.json`, 'application/json', toJSON());
-  downloadBlob(`${base}_points.csv`, 'text/csv', toCSV());
-  downloadBlob(`${base}_boxes.csv`, 'text/csv', toBoxesCSV());
 }

@@ -1,7 +1,7 @@
 // Top-bar video library: pick a video (everything in _UPLOADS), upload one,
 // and load a saved annotation set (version) for the current video.
 
-import { state, loadAnnotations, contentSignature, subscribe } from './state.js';
+import { state, loadAnnotations, contentSignature, subscribe, refresh } from './state.js';
 import { clearRenders } from './render.js';
 
 const els = {};
@@ -24,9 +24,10 @@ export async function initLibrary() {
 // Current annotations == what was last loaded/saved.
 export function markSaved() {
   savedSig = contentSignature();
+  refresh();
 }
 
-function hasUnsavedChanges() {
+export function hasUnsavedChanges() {
   return contentSignature() !== savedSig;
 }
 
