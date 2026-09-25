@@ -258,7 +258,7 @@ function renderControls(obj) {
     : status === 'fresh' ? 'Rendered — click to render again' : 'Render the overlay for viewing mode';
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    renderObject(obj);
+    renderObject(obj, state.video.fps || undefined);
     refresh();
   });
   const mark = document.createElement('span');

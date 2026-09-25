@@ -84,7 +84,7 @@ export function toBoxesCSV() {
 }
 
 // fps / frame count come from the server (read from the video file), once.
-async function ensureVideoInfo() {
+export async function ensureVideoInfo() {
   if (state.video.fps) return;
   const res = await fetch(`/api/video/info?video=${encodeURIComponent(state.video.id)}`);
   if (!res.ok) throw new Error(`video info failed: ${res.status}`);

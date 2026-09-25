@@ -5,7 +5,7 @@ import { state, addObject, resetHistory, refresh } from './state.js';
 import { initLibrary, markSaved, refreshSets, videoIdFromParam } from './library.js';
 import { initOverlay, draw } from './overlay.js';
 import { initUI, tick, applySamAvailability } from './ui.js';
-import { saveToOutput, download } from './export.js';
+import { saveToOutput, download, ensureVideoInfo } from './export.js';
 import { initSam } from './sam/client.js';
 
 const video = document.getElementById('video');
@@ -53,9 +53,22 @@ addObject(); // start with "fish 1" (a point object) active
 resetHistory(); // ...which is not an undoable edit
 initSam(video).then(applySamAvailability);
 initLibrary();
+if (state.video.id) ensureVideoInfo().catch((err) => console.warn('video info unavailable:', err));
+
+// While playing, video.currentTime is the media clock, which can run ahead of
+// or behind the frame actually on screen; requestVideoFrameCallback reports the
+// presented frame's own timestamp, so the overlay is drawn for that frame.
+let presentedTime = null;
+if ('requestVideoFrameCallback' in video) {
+  const onVideoFrame = (_now, meta) => {
+    presentedTime = meta.mediaTime;
+    video.requestVideoFrameCallback(onVideoFrame);
+  };
+  video.requestVideoFrameCallback(onVideoFrame);
+}
 
 function frame() {
-  const now = video.currentTime;
+  const now = !video.paused && presentedTime !== null ? presentedTime : video.currentTime;
   draw(now);
   tick(now);
   requestAnimationFrame(frame);
