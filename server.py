@@ -1,4 +1,4 @@
-"""FishTrackSpline server: static frontend, videos (with Range) + uploads, versioned
+"""FishTrackSpline server: static frontend, uploaded videos (with Range), versioned
 annotation sets, MobileSAM."""
 
 import os
@@ -15,9 +15,8 @@ from pydantic import BaseModel
 from library import AnnotationStore, LibraryError, list_videos, resolve_video, upload_path
 from sam_service import SamService
 
-VIDEOS_DIR = Path(os.environ.get("VIDEOS_DIR", "_VIDEOS_COMMON")).resolve()
 OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "_OUTPUT")).resolve()
-UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "_UPLOADS")).resolve()
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", "_UPLOADS")).resolve()  # the only video source
 MODELS_DIR = Path(os.environ.get("MODELS_DIR", "_COMMON/_MODELS/MOBILESAM")).resolve()
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "_CACHE/sam")).resolve()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -30,7 +29,7 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 def video_file(video: str) -> Path:
     try:
-        return resolve_video(video, VIDEOS_DIR, UPLOADS_DIR)
+        return resolve_video(video, UPLOADS_DIR)
     except LibraryError as err:
         raise HTTPException(status_code=404, detail=str(err))
 
@@ -40,8 +39,8 @@ def video_file(video: str) -> Path:
 
 @app.get("/api/videos")
 def videos():
-    """Shared videos and uploads: [{id, name, source}] (id = URL path, e.g. "videos/720p/x.mp4")."""
-    return list_videos(VIDEOS_DIR, UPLOADS_DIR)
+    """Videos in UPLOADS_DIR: [{id, name}] (id = URL path, e.g. "uploads/x.mp4")."""
+    return list_videos(UPLOADS_DIR)
 
 
 @app.post("/api/videos/upload")
@@ -63,7 +62,7 @@ async def upload_video(name: str, request: Request):
         tmp.replace(dest)
     finally:
         tmp.unlink(missing_ok=True)
-    return {"id": f"uploads/{dest.name}", "name": dest.name, "source": "uploads", "bytes": size}
+    return {"id": f"uploads/{dest.name}", "name": dest.name, "bytes": size}
 
 
 @app.get("/api/video/info")
@@ -180,6 +179,5 @@ def decoder_model():
     return FileResponse(sam.decoder_path, media_type="application/octet-stream")
 
 
-app.mount("/videos", StaticFiles(directory=VIDEOS_DIR), name="videos")
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

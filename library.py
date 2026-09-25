@@ -1,7 +1,7 @@
-"""Video library (shared videos + uploads) and versioned annotation sets.
+"""Video library (UPLOADS_DIR, the only video source) and versioned annotation sets.
 
-Video ids are URL paths without the leading slash: "videos/<path under VIDEOS_DIR>"
-or "uploads/<file name>". Every saved annotation set is a new, never-overwritten
+Video ids are URL paths without the leading slash: "uploads/<path under UPLOADS_DIR>"
+(uploaded files, or videos copied in by hand). Every saved annotation set is a new, never-overwritten
 OUTPUT_DIR/<uuid>/ with a meta.json, indexed in OUTPUT_DIR/annotation_sets.json
 as {uuid, video_stem, video_path, version, saved_at, based_on}; version counts
 up per video_path.
@@ -25,29 +25,25 @@ class LibraryError(ValueError):
     """Bad client input (-> HTTP 400/404)."""
 
 
-def list_videos(videos_dir: Path, uploads_dir: Path) -> list[dict]:
-    out = []
-    for source, root in (("videos", videos_dir), ("uploads", uploads_dir)):
-        if not root.is_dir():
-            continue
-        found = []
-        for dirpath, dirnames, filenames in os.walk(root):
+def list_videos(uploads_dir: Path) -> list[dict]:
+    """Videos under UPLOADS_DIR (subfolders included): [{id, name}], sorted by name."""
+    found = []
+    if uploads_dir.is_dir():
+        for dirpath, dirnames, filenames in os.walk(uploads_dir):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for f in filenames:
                 if not f.startswith(".") and Path(f).suffix.lower() in VIDEO_EXTENSIONS:
-                    found.append(Path(dirpath, f).relative_to(root).as_posix())
-        out += [{"id": f"{source}/{rel}", "name": rel, "source": source} for rel in sorted(found, key=str.lower)]
-    return out
+                    found.append(Path(dirpath, f).relative_to(uploads_dir).as_posix())
+    return [{"id": f"uploads/{rel}", "name": rel} for rel in sorted(found, key=str.lower)]
 
 
-def resolve_video(video_id: str, videos_dir: Path, uploads_dir: Path) -> Path:
-    """Video id -> file on disk (must stay inside its root and exist)."""
+def resolve_video(video_id: str, uploads_dir: Path) -> Path:
+    """Video id -> file on disk (must stay inside UPLOADS_DIR and exist)."""
     source, _, rel = video_id.partition("/")
-    root = {"videos": videos_dir, "uploads": uploads_dir}.get(source)
-    if root is None or not rel:
+    if source != "uploads" or not rel:
         raise LibraryError(f"unknown video: {video_id!r}")
-    path = (root / rel).resolve()
-    if not path.is_relative_to(root.resolve()) or not path.is_file():
+    path = (uploads_dir / rel).resolve()
+    if not path.is_relative_to(uploads_dir.resolve()) or not path.is_file():
         raise LibraryError(f"video not found: {video_id!r}")
     return path
 

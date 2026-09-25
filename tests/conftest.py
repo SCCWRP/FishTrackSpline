@@ -10,8 +10,7 @@ def client_factory(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
     def make(models_dir: Path):
-        (tmp_path / "videos").mkdir(exist_ok=True)
-        monkeypatch.setenv("VIDEOS_DIR", str(tmp_path / "videos"))
+        (tmp_path / "uploads").mkdir(exist_ok=True)
         monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "out"))
         monkeypatch.setenv("MODELS_DIR", str(models_dir))
         monkeypatch.setenv("CACHE_DIR", str(tmp_path / "cache"))
