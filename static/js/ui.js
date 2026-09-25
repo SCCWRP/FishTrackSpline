@@ -24,8 +24,8 @@ export function initUI(videoEl) {
   video = videoEl;
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
-    'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
-    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
+    'addObjectBtn', 'addObjectMenu', 'renderAllBtn', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
+    'stageHint', 'stageSpinner', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
     'modeToggle',
   ]) {
     els[id] = document.getElementById(id);
@@ -34,6 +34,10 @@ export function initUI(videoEl) {
   wireTransport();
   wireKeyboard();
   wireAddMenu();
+  els.renderAllBtn.addEventListener('click', () => {
+    for (const obj of renderableObjects()) renderObject(obj);
+    refresh();
+  });
   wireBoxToolbar();
   els.undoBtn.addEventListener('click', undo);
   els.redoBtn.addEventListener('click', redo);
@@ -176,7 +180,7 @@ function renderSidebar() {
   els.stageHint.textContent = state.video.notice || hintText();
   els.stageHint.classList.toggle(
     'hidden',
-    !state.video.notice && (!editing || state.objects.some((o) => keysOf(o).length > 0)),
+    !state.video.notice && (!editing || !getActiveObject() || state.objects.some((o) => keysOf(o).length > 0)),
   );
 }
 
@@ -196,7 +200,12 @@ function renderToolbar() {
   els.isolateBtn.setAttribute('aria-pressed', String(state.isolate));
 }
 
+function renderableObjects() {
+  return state.objects.filter((o) => o.type === 'box' && o.boxes.length > 0);
+}
+
 function renderObjects() {
+  els.renderAllBtn.disabled = renderableObjects().length === 0;
   els.objectList.textContent = '';
   for (const obj of state.objects) {
     const li = document.createElement('li');
@@ -393,9 +402,17 @@ export function tick(now) {
   els.timeReadout.textContent = `${formatTime(now)} / ${formatTime(video.duration)}`;
   if (!scrubbing) els.scrubber.value = now;
 
-  if (!els.boxToolbar.classList.contains('hidden')) {
+  const toolbarShown = !els.boxToolbar.classList.contains('hidden');
+  const encoding = toolbarShown && samStatusText() === 'Encoding…';
+  if (els.stageSpinner.classList.contains('hidden') === encoding) els.stageSpinner.classList.toggle('hidden', !encoding);
+  if (toolbarShown) {
     const status = samStatusText();
-    if (els.samStatus.textContent !== status) els.samStatus.textContent = status;
+    if (els.samStatus.textContent !== status) {
+      els.samStatus.textContent = status;
+      // red until this frame's embedding exists, green once it's ready to prompt
+      els.samStatus.classList.toggle('not-encoded', status === 'Not encoded');
+      els.samStatus.classList.toggle('ready', status === 'Ready');
+    }
   }
 
   let nearest = null;

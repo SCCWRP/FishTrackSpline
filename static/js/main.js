@@ -1,7 +1,7 @@
 // Bootstrap: video source from ?video= (a file in _UPLOADS; default: the first
 // one), stage sizing, rAF loop, export buttons.
 
-import { state, addObject, resetHistory, refresh } from './state.js';
+import { state, refresh } from './state.js';
 import { initLibrary, markSaved, refreshSets, videoIdFromParam } from './library.js';
 import { initOverlay, draw } from './overlay.js';
 import { initUI, tick, applySamAvailability } from './ui.js';
@@ -49,8 +49,6 @@ video.addEventListener('error', () => {
 
 initUI(video);
 initOverlay(video, canvas);
-addObject(); // start with "fish 1" (a point object) active
-resetHistory(); // ...which is not an undoable edit
 initSam(video).then(applySamAvailability);
 initLibrary();
 

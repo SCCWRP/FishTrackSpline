@@ -27,7 +27,7 @@ export const state = {
   activeObjectId: null,
   nextObjectNum: 1,
   nextObjectId: 1,
-  inputMode: 'manual-box', // box objects: 'manual-box' | 'sam-box' | 'sam-points'
+  inputMode: 'sam-box', // box objects: 'manual-box' | 'sam-box' | 'sam-points'
   samDecode: loadSamDecode(), // 'server' | 'browser'
   viewMode: 'edit', // 'edit' (annotate) | 'view' (crosshairs + rendered box overlays only)
   isolate: false, // box objects: draw only the active object's keyframe on the current frame
@@ -322,9 +322,9 @@ export function setSamDecode(mode) {
 
 function loadSamDecode() {
   try {
-    return localStorage.getItem(SAM_DECODE_KEY) === 'browser' ? 'browser' : 'server';
+    return localStorage.getItem(SAM_DECODE_KEY) === 'server' ? 'server' : 'browser';
   } catch {
-    return 'server';
+    return 'browser';
   }
 }
 
