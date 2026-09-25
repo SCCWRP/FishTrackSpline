@@ -296,6 +296,8 @@ body {
 }
 .panel-header .add-menu button:hover { background: #303748; filter: none; }
 
+.object-actions { display: flex; justify-content: flex-end; }
+
 .object-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
 
 .object-row {

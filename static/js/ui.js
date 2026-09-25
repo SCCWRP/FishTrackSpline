@@ -24,7 +24,7 @@ export function initUI(videoEl) {
   video = videoEl;
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
-    'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
+    'addObjectBtn', 'addObjectMenu', 'renderAllBtn', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
     'stageHint', 'stageSpinner', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
     'modeToggle',
   ]) {
@@ -34,6 +34,10 @@ export function initUI(videoEl) {
   wireTransport();
   wireKeyboard();
   wireAddMenu();
+  els.renderAllBtn.addEventListener('click', () => {
+    for (const obj of renderableObjects()) renderObject(obj);
+    refresh();
+  });
   wireBoxToolbar();
   els.undoBtn.addEventListener('click', undo);
   els.redoBtn.addEventListener('click', redo);
@@ -196,7 +200,12 @@ function renderToolbar() {
   els.isolateBtn.setAttribute('aria-pressed', String(state.isolate));
 }
 
+function renderableObjects() {
+  return state.objects.filter((o) => o.type === 'box' && o.boxes.length > 0);
+}
+
 function renderObjects() {
+  els.renderAllBtn.disabled = renderableObjects().length === 0;
   els.objectList.textContent = '';
   for (const obj of state.objects) {
     const li = document.createElement('li');
