@@ -25,7 +25,7 @@ export function initUI(videoEl) {
   for (const id of [
     'playBtn', 'stepBack', 'stepFwd', 'scrubber', 'timeReadout', 'rateSelect',
     'addObjectBtn', 'addObjectMenu', 'objectList', 'pointsCaption', 'pointsHead', 'pointsBody',
-    'stageHint', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
+    'stageHint', 'stageSpinner', 'undoBtn', 'redoBtn', 'boxToolbar', 'inputMode', 'samDecode', 'isolateBtn', 'samStatus',
     'modeToggle',
   ]) {
     els[id] = document.getElementById(id);
@@ -393,7 +393,10 @@ export function tick(now) {
   els.timeReadout.textContent = `${formatTime(now)} / ${formatTime(video.duration)}`;
   if (!scrubbing) els.scrubber.value = now;
 
-  if (!els.boxToolbar.classList.contains('hidden')) {
+  const toolbarShown = !els.boxToolbar.classList.contains('hidden');
+  const encoding = toolbarShown && samStatusText() === 'Encoding…';
+  if (els.stageSpinner.classList.contains('hidden') === encoding) els.stageSpinner.classList.toggle('hidden', !encoding);
+  if (toolbarShown) {
     const status = samStatusText();
     if (els.samStatus.textContent !== status) {
       els.samStatus.textContent = status;

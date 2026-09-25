@@ -27,6 +27,9 @@
       <div class="stage" id="stage">
         <video id="video" muted playsinline preload="auto"></video>
         <canvas id="overlay"></canvas>
+        <div class="stage-spinner hidden" id="stageSpinner" role="status" aria-label="Encoding frame for SAM">
+          <span class="spinner"></span><span>Encoding frame…</span>
+        </div>
         <div class="stage-hint" id="stageHint">Click on the video to add a point for the active object</div>
       </div>
       <div class="box-toolbar hidden" id="boxToolbar">
