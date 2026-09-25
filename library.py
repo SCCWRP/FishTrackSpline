@@ -12,12 +12,14 @@ import os
 import re
 import threading
 import uuid as uuidlib
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 INDEX_FILE = "annotation_sets.json"
 META_FILE = "meta.json"
+ANNOTATIONS_FILE = "annotation_set.json"  # full-fidelity objects (points + boxes), read back on load
 _UPLOAD_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -115,12 +117,31 @@ class AnnotationStore:
         entries = [e for e in self._read_index() if video_path is None or e["video_path"] == video_path]
         return sorted(entries, key=lambda e: (e["video_path"], -e["version"]))
 
-    def load(self, set_uuid: str) -> dict:
-        """The saved annotation JSON (<stem>_points.json) of a set."""
+    def _entry(self, set_uuid: str) -> dict:
         entry = next((e for e in self._read_index() if e["uuid"] == set_uuid), None)
         if entry is None:
             raise LibraryError(f"unknown annotation set: {set_uuid!r}")
-        path = self.output_dir / entry["uuid"] / f"{entry['video_stem']}_points.json"
+        return entry
+
+    def load(self, set_uuid: str) -> dict:
+        """The saved annotation JSON (annotation_set.json) of a set."""
+        entry = self._entry(set_uuid)
+        path = self.output_dir / entry["uuid"] / ANNOTATIONS_FILE
         if not path.is_file():
             raise LibraryError(f"annotation file missing for set {set_uuid}")
         return {"set": entry, "annotations": json.loads(path.read_text(encoding="utf-8"))}
+
+    def zip(self, set_uuid: str) -> Path:
+        """OUTPUT_DIR/<uuid>.zip of the set's folder (built once; sets are never overwritten)."""
+        entry = self._entry(set_uuid)
+        base = self.output_dir / entry["uuid"]
+        dest = self.output_dir / f"{entry['uuid']}.zip"
+        with self._lock:
+            if not dest.is_file():
+                tmp = dest.with_name(f".{dest.name}.part")
+                with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for f in sorted(base.rglob("*")):
+                        if f.is_file():
+                            zf.write(f, Path(entry["uuid"], f.relative_to(base)).as_posix())
+                tmp.replace(dest)
+        return dest

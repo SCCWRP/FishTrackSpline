@@ -64,7 +64,7 @@ def test_annotation_sets_are_versioned_per_video(client_factory, tmp_path):
     make_video(tmp_path / "uploads" / "other" / "clip.mp4")  # same stem, different video
     doc = {"objects": [{"id": 1, "name": "fish 1", "type": "box", "boxes": []}]}
     files = {
-        "clip_points.json": json.dumps(doc),
+        "annotation_set.json": json.dumps(doc),
         "ground_truth/annotations.xml": "<annotations/>",
         "yolo-labels/0000000001.txt": "0 0.5 0.5 0.1 0.1\n",
     }
@@ -90,6 +90,24 @@ def test_annotation_sets_are_versioned_per_video(client_factory, tmp_path):
     loaded = client.get(f"/api/annotation-sets/{v2['uuid']}").json()
     assert loaded == {"set": v2, "annotations": doc}
     assert client.get("/api/annotation-sets/nope").status_code == 404
+
+
+def test_annotation_set_download_zips_the_folder(client_factory, tmp_path):
+    import io
+    import zipfile
+
+    client = client_factory(tmp_path / "no-models")
+    make_video(tmp_path / "uploads" / "clip.mp4")
+    files = {"annotation_set.json": "{}", "clip_points.csv": "a\n", "yolo-labels/0000000001.txt": "0 0.5 0.5 0.1 0.1\n"}
+    s = client.post("/api/annotation-sets", json={"video": "uploads/clip.mp4", "files": files}).json()
+
+    res = client.get(f"/api/annotation-sets/{s['uuid']}/download")
+    assert res.status_code == 200 and res.headers["content-type"] == "application/zip"
+    assert f'filename="{s["uuid"]}.zip"' in res.headers["content-disposition"]
+    names = zipfile.ZipFile(io.BytesIO(res.content)).namelist()
+    assert sorted(names) == sorted(f"{s['uuid']}/{n}" for n in [*files, "meta.json"])
+    assert (tmp_path / "out" / f"{s['uuid']}.zip").read_bytes() == res.content
+    assert client.get("/api/annotation-sets/nope/download").status_code == 404
 
 
 @pytest.mark.parametrize(

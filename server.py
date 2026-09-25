@@ -111,6 +111,16 @@ def load_annotation_set(set_uuid: str):
         raise HTTPException(status_code=404, detail=str(err))
 
 
+@app.get("/api/annotation-sets/{set_uuid}/download")
+def download_annotation_set(set_uuid: str):
+    """The whole OUTPUT_DIR/<uuid>/ folder as a zip (kept as OUTPUT_DIR/<uuid>.zip)."""
+    try:
+        path = store.zip(set_uuid)
+    except LibraryError as err:
+        raise HTTPException(status_code=404, detail=str(err))
+    return FileResponse(path, media_type="application/zip", filename=path.name)
+
+
 # ---------- MobileSAM ----------
 
 
